@@ -2,7 +2,7 @@
 
 Academic Calendar adds a homework-focused calendar view to Gibbon for Students, Parents, and Staff.
 
-It is built for Gibbon `v31.0.00+` and uses FullCalendar to display Planner homework due dates in month/week/list views.
+It is built for Gibbon `v31.0.00+` and uses FullCalendar to display Planner homework due dates in month/week/list views, and is based on a module called "HomeworkCalendar" by JC Rozo.
 
 ## Features
 
