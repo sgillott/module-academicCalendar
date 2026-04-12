@@ -1,0 +1,51 @@
+.acFilterRow {
+    margin: 0 0 12px 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+#academicCalendar {
+    margin-top: 8px;
+}
+
+#academicCalendar .fc .fc-toolbar-title {
+    font-size: 1.15rem;
+}
+
+#academicCalendar .fc .fc-button {
+    padding: 0.35em 0.65em;
+}
+
+.acColorSetting {
+    display: inline-flex;
+    align-items: center;
+}
+
+.acColorSetting > button {
+    order: 2;
+}
+
+.acColorSetting .acColorSettingInput {
+    order: 1;
+    width: 96px;
+    flex: 0 0 auto;
+}
+
+.acColorSetting > .absolute {
+    left: auto !important;
+    right: 0;
+}
+
+@media (max-width: 768px) {
+    #academicCalendar .fc .fc-toolbar-title {
+        font-size: 1rem;
+    }
+
+    #academicCalendar .fc .fc-list-event-title,
+    #academicCalendar .fc .fc-event-title {
+        white-space: normal;
+        line-height: 1.35;
+    }
+}

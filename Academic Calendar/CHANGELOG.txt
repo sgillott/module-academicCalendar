@@ -1,0 +1,17 @@
+CHANGELOG
+=========
+
+v0.1.0 (2026-04-12)
+-------------------
+- Initial release of the Academic Calendar module.
+- Added 'Homework Calendar' action for Staff, Students and Parents.
+- Implemented FullCalendar month/week/list views with mobile-friendly toolbar behavior.
+- Added calendar event source endpoint: 'calendar_eventsJSON.php'.
+- Refactored data access into gateway class: 'src/Domain/AcademicCalendarEventGateway.php'.
+- Added settings management for:
+  - Event type colours (palette picker + custom hex input)
+  - Show weekends
+  - Default staff view
+  - Enabled year groups
+- Added dashboard hooks for Staff, Student and Parental dashboards.
+- Added year-group filtering controls and permission-based all-year-group staff option.
