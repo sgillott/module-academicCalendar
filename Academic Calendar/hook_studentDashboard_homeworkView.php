@@ -2,6 +2,14 @@
 
 require_once __DIR__.'/moduleFunctions.php';
 
+/**
+ * Student Dashboard hook renderer.
+ *
+ * Returns an embedded Homework Calendar iframe, or a warning when
+ * the current student is outside enabled year groups.
+ *
+ * @return string HTML fragment for the dashboard tab.
+ */
 $output = '';
 $enabledYearGroupIDs = ac_getEnabledYearGroupIDsFromConnection($connection2);
 $gibbonSchoolYearID = (string) $session->get('gibbonSchoolYearID');

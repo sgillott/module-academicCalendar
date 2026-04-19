@@ -1,5 +1,13 @@
 <?php
 
+/**
+ * Staff Dashboard hook renderer.
+ *
+ * Returns an embedded Homework Calendar iframe for staff users
+ * with access to the module action.
+ *
+ * @return string HTML fragment for the dashboard tab.
+ */
 $output = '';
 
 if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calendar_view.php')) {

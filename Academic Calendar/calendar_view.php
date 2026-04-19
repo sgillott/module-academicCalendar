@@ -1,10 +1,18 @@
 <?php
 
 use Gibbon\Domain\System\SettingGateway;
+use Gibbon\Domain\School\YearGroupGateway;
+use Gibbon\Domain\Students\StudentGateway;
 use Gibbon\Module\AcademicCalendar\Domain\AcademicCalendarEventGateway;
 
 require_once __DIR__.'/moduleFunctions.php';
 
+/**
+ * Homework Calendar view.
+ *
+ * Renders role-specific filters plus FullCalendar client initialization.
+ * Also supports embed mode for dashboard hook iframes.
+ */
 if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calendar_view.php')) {
     $page->addError(__('You do not have access to this action.'));
 } else {
@@ -25,6 +33,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
     $gibbonSchoolYearID = (string) $session->get('gibbonSchoolYearID');
 
     $settingGateway = $container->get(SettingGateway::class);
+    $yearGroupGateway = $container->get(YearGroupGateway::class);
+    $studentGateway = $container->get(StudentGateway::class);
     $eventGateway = $container->get(AcademicCalendarEventGateway::class);
 
     $showWeekends = ac_getShowWeekends($settingGateway);
@@ -42,15 +52,17 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
         );
 
         if ($canFilterAllYearGroups) {
-            $yearGroups = $eventGateway->selectAllYearGroupsBySchoolYear($gibbonSchoolYearID);
+            if (!empty($enabledYearGroupIDs)) {
+                $yearGroups = $yearGroupGateway->selectYearGroupsByIDs($enabledYearGroupIDs)->fetchAll();
+            } else {
+                $yearGroups = $yearGroupGateway->selectYearGroups()->fetchAll();
+            }
         } else {
             $yearGroups = $eventGateway->selectYearGroupsForStaff($gibbonSchoolYearID, $gibbonPersonID);
         }
+        $yearGroups = ac_normalizeYearGroupRows($yearGroups);
         $yearGroups = ac_filterYearGroupsByEnabled($yearGroups, $enabledYearGroupIDs);
-        $yearGroupID = trim((string) ($_GET['yearGroupID'] ?? ''));
-        if ($yearGroupID !== '' && !ctype_digit($yearGroupID)) {
-            $yearGroupID = '';
-        }
+        $yearGroupID = ac_sanitizeNumericID($_GET['yearGroupID'] ?? '');
 
         $validYearGroups = array_column($yearGroups, 'gibbonYearGroupID');
         if ($yearGroupID !== '' && !in_array($yearGroupID, $validYearGroups, true)) {
@@ -64,11 +76,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
     $childPersonID = '';
     $children = [];
     if ($roleCategory === 'Parent') {
-        $children = $eventGateway->selectChildrenForParent($gibbonPersonID);
-        $childPersonID = trim((string) ($_GET['childPersonID'] ?? ''));
-        if ($childPersonID !== '' && !ctype_digit($childPersonID)) {
-            $childPersonID = '';
-        }
+        $children = $studentGateway->selectActiveStudentsByFamilyAdult($gibbonSchoolYearID, $gibbonPersonID)->fetchAll();
+        $children = ac_normalizeChildRows($children);
+        $childPersonID = ac_sanitizeNumericID($_GET['childPersonID'] ?? '');
 
         $validChildren = array_column($children, 'childPersonID');
         if ($childPersonID === '' && !empty($validChildren)) {
@@ -131,13 +141,13 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
         echo '</form>';
     }
 
-    if ($roleCategory === 'Parent') {
+    if ($roleCategory === 'Parent' && !$isEmbed) {
         echo '<form method="get" action="'.htmlspecialchars($formAction).'" class="acFilterRow">';
         echo '<input type="hidden" name="q" value="'.htmlspecialchars($route).'">';
         if ($isEmbed) {
             echo '<input type="hidden" name="embed" value="1">';
         }
-        echo '<label for="childPersonID"><strong>'.__('Child').':</strong></label> ';
+        echo '<label for="childPersonID"><strong>'.__('Student').':</strong></label> ';
         echo '<select id="childPersonID" name="childPersonID" onchange="this.form.submit()">';
         foreach ($children as $child) {
             $id = (string) $child['childPersonID'];

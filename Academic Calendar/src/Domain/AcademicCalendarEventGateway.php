@@ -13,6 +13,14 @@ class AcademicCalendarEventGateway extends QueryableGateway
     private static $primaryKey = 'gibbonPlannerEntryID';
     private static $searchableColumns = [];
 
+    /**
+     * Get year groups linked to classes taught by a staff member.
+     *
+     * @param string $gibbonSchoolYearID Active school year ID.
+     * @param string $gibbonPersonID Staff person ID.
+     *
+     * @return array<int, array<string, mixed>> Year-group rows.
+     */
     public function selectYearGroupsForStaff(string $gibbonSchoolYearID, string $gibbonPersonID): array
     {
         $data = [
@@ -35,43 +43,16 @@ class AcademicCalendarEventGateway extends QueryableGateway
         return $this->db()->select($sql, $data)->fetchAll();
     }
 
-    public function selectAllYearGroupsBySchoolYear(string $gibbonSchoolYearID): array
-    {
-        $data = ['gibbonSchoolYearID' => $gibbonSchoolYearID];
-
-        $sql = "
-            SELECT DISTINCT yg.gibbonYearGroupID, yg.name, yg.nameShort, yg.sequenceNumber
-            FROM gibbonYearGroup yg
-            INNER JOIN gibbonStudentEnrolment se ON se.gibbonYearGroupID = yg.gibbonYearGroupID
-            WHERE se.gibbonSchoolYearID = :gibbonSchoolYearID
-            ORDER BY yg.sequenceNumber, yg.name
-        ";
-
-        return $this->db()->select($sql, $data)->fetchAll();
-    }
-
-    public function selectChildrenForParent(string $gibbonPersonID): array
-    {
-        $data = ['gibbonPersonID' => $gibbonPersonID];
-
-        $sql = "
-            SELECT DISTINCT
-                fc.gibbonPersonID AS childPersonID,
-                p.preferredName,
-                p.surname
-            FROM gibbonFamilyAdult fa
-            INNER JOIN gibbonFamily f ON f.gibbonFamilyID = fa.gibbonFamilyID
-            INNER JOIN gibbonFamilyChild fc ON fc.gibbonFamilyID = f.gibbonFamilyID
-            INNER JOIN gibbonPerson p ON p.gibbonPersonID = fc.gibbonPersonID
-            WHERE fa.gibbonPersonID = :gibbonPersonID
-              AND fa.childDataAccess = 'Y'
-              AND p.status = 'Full'
-            ORDER BY p.surname, p.preferredName
-        ";
-
-        return $this->db()->select($sql, $data)->fetchAll();
-    }
-
+    /**
+     * Select homework events visible to a student.
+     *
+     * @param string $gibbonSchoolYearID Active school year ID.
+     * @param string $gibbonPersonID Student person ID.
+     * @param string $dateStart Inclusive datetime lower bound (`Y-m-d H:i:s`).
+     * @param string $dateEnd Exclusive datetime upper bound (`Y-m-d H:i:s`).
+     *
+     * @return array<int, array<string, mixed>> Planner/markbook event rows.
+     */
     public function selectStudentEvents(
         string $gibbonSchoolYearID,
         string $gibbonPersonID,
@@ -102,6 +83,17 @@ class AcademicCalendarEventGateway extends QueryableGateway
         return $this->db()->select($sql, $data)->fetchAll();
     }
 
+    /**
+     * Select homework events visible to a parent for a specific child.
+     *
+     * @param string $gibbonSchoolYearID Active school year ID.
+     * @param string $parentPersonID Parent person ID.
+     * @param string $childPersonID Child person ID.
+     * @param string $dateStart Inclusive datetime lower bound (`Y-m-d H:i:s`).
+     * @param string $dateEnd Exclusive datetime upper bound (`Y-m-d H:i:s`).
+     *
+     * @return array<int, array<string, mixed>> Planner/markbook event rows.
+     */
     public function selectParentEvents(
         string $gibbonSchoolYearID,
         string $parentPersonID,
@@ -138,6 +130,16 @@ class AcademicCalendarEventGateway extends QueryableGateway
         return $this->db()->select($sql, $data)->fetchAll();
     }
 
+    /**
+     * Select homework events for staff calendar view.
+     *
+     * @param string $gibbonSchoolYearID Active school year ID.
+     * @param string $dateStart Inclusive datetime lower bound (`Y-m-d H:i:s`).
+     * @param string $dateEnd Exclusive datetime upper bound (`Y-m-d H:i:s`).
+     * @param string|null $yearGroupID Optional year-group filter.
+     *
+     * @return array<int, array<string, mixed>> Planner/markbook event rows.
+     */
     public function selectStaffEvents(
         string $gibbonSchoolYearID,
         string $dateStart,
@@ -169,6 +171,13 @@ class AcademicCalendarEventGateway extends QueryableGateway
         return $this->db()->select($sql, $data)->fetchAll();
     }
 
+    /**
+     * Shared select block for planner entries and related course/class fields.
+     *
+     * Includes first related markbook column data via correlated subqueries.
+     *
+     * @return string SQL select block.
+     */
     private function baseEventSql(): string
     {
         return "
@@ -180,30 +189,27 @@ class AcademicCalendarEventGateway extends QueryableGateway
                 c.gibbonYearGroupIDList,
                 c.nameShort AS courseNameShort,
                 cc.nameShort AS classNameShort,
-                (
-                    SELECT mb.gibbonMarkbookColumnID
-                    FROM gibbonMarkbookColumn mb
-                    WHERE mb.gibbonPlannerEntryID = pe.gibbonPlannerEntryID
-                    ORDER BY mb.gibbonMarkbookColumnID ASC
-                    LIMIT 1
-                ) AS markbookColumnID,
-                (
-                    SELECT mb.name
-                    FROM gibbonMarkbookColumn mb
-                    WHERE mb.gibbonPlannerEntryID = pe.gibbonPlannerEntryID
-                    ORDER BY mb.gibbonMarkbookColumnID ASC
-                    LIMIT 1
-                ) AS markbookName,
-                (
-                    SELECT mb.type
-                    FROM gibbonMarkbookColumn mb
-                    WHERE mb.gibbonPlannerEntryID = pe.gibbonPlannerEntryID
-                    ORDER BY mb.gibbonMarkbookColumnID ASC
-                    LIMIT 1
-                ) AS markbookType
+                mb.gibbonMarkbookColumnID AS markbookColumnID,
+                mb.name AS markbookName,
+                mb.type AS markbookType
             FROM gibbonPlannerEntry pe
             INNER JOIN gibbonCourseClass cc ON cc.gibbonCourseClassID = pe.gibbonCourseClassID
             INNER JOIN gibbonCourse c ON c.gibbonCourseID = cc.gibbonCourseID
+            LEFT JOIN (
+                SELECT
+                    mb1.gibbonPlannerEntryID,
+                    mb1.gibbonMarkbookColumnID,
+                    mb1.name,
+                    mb1.type
+                FROM gibbonMarkbookColumn mb1
+                INNER JOIN (
+                    SELECT
+                        gibbonPlannerEntryID,
+                        MIN(gibbonMarkbookColumnID) AS firstMarkbookColumnID
+                    FROM gibbonMarkbookColumn
+                    GROUP BY gibbonPlannerEntryID
+                ) mbFirst ON mbFirst.firstMarkbookColumnID = mb1.gibbonMarkbookColumnID
+            ) mb ON mb.gibbonPlannerEntryID = pe.gibbonPlannerEntryID
         ";
     }
 }

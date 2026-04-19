@@ -1,11 +1,17 @@
 <?php
 
 use Gibbon\Domain\System\SettingGateway;
+use Gibbon\Domain\School\YearGroupGateway;
 use Gibbon\Module\AcademicCalendar\Domain\AcademicCalendarEventGateway;
 
 require_once '../../gibbon.php';
 require_once './moduleFunctions.php';
 
+/**
+ * FullCalendar JSON feed endpoint.
+ *
+ * Returns role-aware homework events for the requested date window.
+ */
 header('Content-Type: application/json; charset=utf-8');
 
 if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calendar_view.php')) {
@@ -28,18 +34,12 @@ $roleCategory = (string) $session->get('gibbonRoleIDCurrentCategory');
 $gibbonPersonID = (string) $session->get('gibbonPersonID');
 $gibbonSchoolYearID = (string) $session->get('gibbonSchoolYearID');
 
-$yearGroupID = trim((string) ($_GET['yearGroupID'] ?? ''));
-$childPersonID = trim((string) ($_GET['childPersonID'] ?? ''));
-
-if ($yearGroupID !== '' && !ctype_digit($yearGroupID)) {
-    $yearGroupID = '';
-}
-if ($childPersonID !== '' && !ctype_digit($childPersonID)) {
-    $childPersonID = '';
-}
+$yearGroupID = ac_sanitizeNumericID($_GET['yearGroupID'] ?? '');
+$childPersonID = ac_sanitizeNumericID($_GET['childPersonID'] ?? '');
 
 $eventGateway = $container->get(AcademicCalendarEventGateway::class);
 $settingGateway = $container->get(SettingGateway::class);
+$yearGroupGateway = $container->get(YearGroupGateway::class);
 $customColors = ac_getColorMap($settingGateway);
 $enabledYearGroupIDs = ac_getEnabledYearGroupIDs($settingGateway);
 
@@ -57,23 +57,14 @@ $events = [];
 $absoluteURL = $session->get('absoluteURL');
 $yearGroupMap = [];
 if ($roleCategory === 'Staff') {
-    $allYearGroups = $eventGateway->selectAllYearGroupsBySchoolYear($gibbonSchoolYearID);
-    $allYearGroups = ac_filterYearGroupsByEnabled($allYearGroups, $enabledYearGroupIDs);
-    foreach ($allYearGroups as $group) {
-        $groupID = (string) ($group['gibbonYearGroupID'] ?? '');
-        if ($groupID === '') {
-            continue;
-        }
-
-        $label = trim((string) ($group['nameShort'] ?? ''));
-        if ($label === '') {
-            $label = trim((string) ($group['name'] ?? ''));
-        }
-
-        if ($label !== '') {
-            $yearGroupMap[$groupID] = $label;
-        }
+    if (!empty($enabledYearGroupIDs)) {
+        $allYearGroups = $yearGroupGateway->selectYearGroupsByIDs($enabledYearGroupIDs)->fetchAll();
+    } else {
+        $allYearGroups = $yearGroupGateway->selectYearGroups()->fetchAll();
     }
+    $allYearGroups = ac_normalizeYearGroupRows($allYearGroups);
+    $allYearGroups = ac_filterYearGroupsByEnabled($allYearGroups, $enabledYearGroupIDs);
+    $yearGroupMap = ac_buildYearGroupMap($allYearGroups);
 }
 foreach ($rows as $row) {
     $type = trim((string) ($row['markbookType'] ?? ''));

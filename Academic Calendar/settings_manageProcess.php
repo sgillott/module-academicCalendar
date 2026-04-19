@@ -5,6 +5,11 @@ use Gibbon\Domain\System\SettingGateway;
 require_once '../../gibbon.php';
 require_once './moduleFunctions.php';
 
+/**
+ * Manage Settings process endpoint.
+ *
+ * Persists module settings and redirects back with standard return codes.
+ */
 $URL = $session->get('absoluteURL').'/index.php?q=/modules/'.getModuleName($_POST['address']).'/settings_manage.php';
 
 if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/settings_manage.php')) {

@@ -6,6 +6,14 @@ use Gibbon\Domain\System\SettingGateway;
 
 require_once __DIR__.'/moduleFunctions.php';
 
+/**
+ * Manage Settings page.
+ *
+ * Builds the module settings form, including:
+ * - display settings
+ * - enabled year groups
+ * - per-event-type color mapping.
+ */
 if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/settings_manage.php')) {
     $page->addError(__('You do not have access to this action.'));
 } else {
