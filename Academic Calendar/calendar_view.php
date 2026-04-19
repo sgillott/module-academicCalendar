@@ -52,11 +52,10 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
         );
 
         if ($canFilterAllYearGroups) {
-            if (!empty($enabledYearGroupIDs)) {
-                $yearGroups = $yearGroupGateway->selectYearGroupsByIDs($enabledYearGroupIDs)->fetchAll();
-            } else {
-                $yearGroups = $yearGroupGateway->selectYearGroups()->fetchAll();
-            }
+            $criteria = $yearGroupGateway
+                ->newQueryCriteria(true)
+                ->sortBy(['sequenceNumber']);
+            $yearGroups = $yearGroupGateway->queryYearGroups($criteria)->toArray();
         } else {
             $yearGroups = $eventGateway->selectYearGroupsForStaff($gibbonSchoolYearID, $gibbonPersonID);
         }
@@ -248,7 +247,11 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                         eventDidMount: function (info) {
                             const props = info.event.extendedProps || {};
                             const lines = [];
-                            const due = info.event.start ? FullCalendar.formatDate(info.event.start, {
+                            const due = info.event.start ? FullCalendar.formatDate(info.event.start, info.event.allDay ? {
+                                year: 'numeric',
+                                month: 'short',
+                                day: '2-digit'
+                            } : {
                                 year: 'numeric',
                                 month: 'short',
                                 day: '2-digit',
@@ -262,6 +265,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                             }
                             if (props.homeworkTitle) {
                                 lines.push(props.homeworkTitle);
+                            }
+                            if (props.description) {
+                                lines.push(props.description);
                             }
                             if (props.yearGroups) {
                                 lines.push('<?= htmlspecialchars(__('Year Group'), ENT_QUOTES); ?>: ' + props.yearGroups);

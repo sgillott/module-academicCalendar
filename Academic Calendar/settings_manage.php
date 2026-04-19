@@ -23,6 +23,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
 
     $colors = ac_getColorMap($settingGateway);
     $showWeekends = (string) $settingGateway->getSettingByScope('Academic Calendar', 'showWeekends');
+    $showHomeworkEvents = (string) $settingGateway->getSettingByScope('Academic Calendar', 'showHomeworkEvents');
+    $showAssessmentEvents = (string) $settingGateway->getSettingByScope('Academic Calendar', 'showAssessmentEvents');
     $defaultStaffView = (string) $settingGateway->getSettingByScope('Academic Calendar', 'defaultStaffView');
     $enabledYearGroupIDList = (string) ($settingGateway->getSettingByScope('Academic Calendar', 'gibbonYearGroupIDList') ?: '');
 
@@ -43,6 +45,14 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $row = $form->addRow();
     $row->addLabel('showWeekends', __('Show Weekends'));
     $row->addYesNo('showWeekends')->selected($showWeekends === 'N' ? 'N' : 'Y');
+
+    $row = $form->addRow();
+    $row->addLabel('showHomeworkEvents', __('Show Homework Events'));
+    $row->addYesNo('showHomeworkEvents')->selected($showHomeworkEvents === 'N' ? 'N' : 'Y');
+
+    $row = $form->addRow();
+    $row->addLabel('showAssessmentEvents', __('Show Assessment Events'));
+    $row->addYesNo('showAssessmentEvents')->selected($showAssessmentEvents === 'N' ? 'N' : 'Y');
 
     $row = $form->addRow();
     $row->addLabel('defaultStaffView', __('Default Staff View'));

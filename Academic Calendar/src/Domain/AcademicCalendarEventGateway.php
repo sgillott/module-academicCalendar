@@ -172,6 +172,137 @@ class AcademicCalendarEventGateway extends QueryableGateway
     }
 
     /**
+     * Select markbook assessment events visible to a student.
+     *
+     * Assessment rows are sourced from gibbonMarkbookColumn and intentionally
+     * exclude planner-linked rows to avoid duplicate calendar events.
+     *
+     * @param string $gibbonSchoolYearID Active school year ID.
+     * @param string $gibbonPersonID Student person ID.
+     * @param string $dateStart Inclusive datetime lower bound (`Y-m-d H:i:s`).
+     * @param string $dateEnd Exclusive datetime upper bound (`Y-m-d H:i:s`).
+     *
+     * @return array<int, array<string, mixed>> Markbook assessment rows.
+     */
+    public function selectStudentAssessmentEvents(
+        string $gibbonSchoolYearID,
+        string $gibbonPersonID,
+        string $dateStart,
+        string $dateEnd
+    ): array {
+        $data = [
+            'gibbonSchoolYearID' => $gibbonSchoolYearID,
+            'gibbonPersonID' => $gibbonPersonID,
+            'dateStart' => date('Y-m-d', strtotime($dateStart)),
+            'dateEnd' => date('Y-m-d', strtotime($dateEnd)),
+        ];
+
+        $sql = $this->baseAssessmentSql()."
+            INNER JOIN gibbonCourseClassPerson ccp
+                ON ccp.gibbonCourseClassID = cc.gibbonCourseClassID
+               AND ccp.gibbonPersonID = :gibbonPersonID
+               AND ccp.role = 'Student'
+            WHERE mc.gibbonPlannerEntryID IS NULL
+              AND c.gibbonSchoolYearID = :gibbonSchoolYearID
+              AND mc.viewableStudents = 'Y'
+              AND mc.date IS NOT NULL
+              AND mc.date >= :dateStart
+              AND mc.date < :dateEnd
+            ORDER BY mc.date, mc.sequenceNumber, mc.gibbonMarkbookColumnID
+        ";
+
+        return $this->db()->select($sql, $data)->fetchAll();
+    }
+
+    /**
+     * Select markbook assessment events visible to a parent for a child.
+     *
+     * @param string $gibbonSchoolYearID Active school year ID.
+     * @param string $parentPersonID Parent person ID.
+     * @param string $childPersonID Child person ID.
+     * @param string $dateStart Inclusive datetime lower bound (`Y-m-d H:i:s`).
+     * @param string $dateEnd Exclusive datetime upper bound (`Y-m-d H:i:s`).
+     *
+     * @return array<int, array<string, mixed>> Markbook assessment rows.
+     */
+    public function selectParentAssessmentEvents(
+        string $gibbonSchoolYearID,
+        string $parentPersonID,
+        string $childPersonID,
+        string $dateStart,
+        string $dateEnd
+    ): array {
+        $data = [
+            'gibbonSchoolYearID' => $gibbonSchoolYearID,
+            'parentPersonID' => $parentPersonID,
+            'childPersonID' => $childPersonID,
+            'dateStart' => date('Y-m-d', strtotime($dateStart)),
+            'dateEnd' => date('Y-m-d', strtotime($dateEnd)),
+        ];
+
+        $sql = $this->baseAssessmentSql()."
+            INNER JOIN gibbonCourseClassPerson ccp
+                ON ccp.gibbonCourseClassID = cc.gibbonCourseClassID
+               AND ccp.gibbonPersonID = :childPersonID
+               AND ccp.role = 'Student'
+            INNER JOIN gibbonFamilyChild fc ON fc.gibbonPersonID = ccp.gibbonPersonID
+            INNER JOIN gibbonFamilyAdult fa ON fa.gibbonFamilyID = fc.gibbonFamilyID
+               AND fa.gibbonPersonID = :parentPersonID
+               AND fa.childDataAccess = 'Y'
+            WHERE mc.gibbonPlannerEntryID IS NULL
+              AND c.gibbonSchoolYearID = :gibbonSchoolYearID
+              AND mc.viewableParents = 'Y'
+              AND mc.date IS NOT NULL
+              AND mc.date >= :dateStart
+              AND mc.date < :dateEnd
+            ORDER BY mc.date, mc.sequenceNumber, mc.gibbonMarkbookColumnID
+        ";
+
+        return $this->db()->select($sql, $data)->fetchAll();
+    }
+
+    /**
+     * Select markbook assessment events for staff calendar view.
+     *
+     * @param string $gibbonSchoolYearID Active school year ID.
+     * @param string $dateStart Inclusive datetime lower bound (`Y-m-d H:i:s`).
+     * @param string $dateEnd Exclusive datetime upper bound (`Y-m-d H:i:s`).
+     * @param string|null $yearGroupID Optional year-group filter.
+     *
+     * @return array<int, array<string, mixed>> Markbook assessment rows.
+     */
+    public function selectStaffAssessmentEvents(
+        string $gibbonSchoolYearID,
+        string $dateStart,
+        string $dateEnd,
+        ?string $yearGroupID = null
+    ): array {
+        $data = [
+            'gibbonSchoolYearID' => $gibbonSchoolYearID,
+            'dateStart' => date('Y-m-d', strtotime($dateStart)),
+            'dateEnd' => date('Y-m-d', strtotime($dateEnd)),
+        ];
+
+        $whereYearGroup = '';
+        if (!empty($yearGroupID)) {
+            $whereYearGroup = " AND FIND_IN_SET(:yearGroupID, REPLACE(c.gibbonYearGroupIDList, ' ', '')) > 0 ";
+            $data['yearGroupID'] = $yearGroupID;
+        }
+
+        $sql = $this->baseAssessmentSql()."
+            WHERE mc.gibbonPlannerEntryID IS NULL
+              AND c.gibbonSchoolYearID = :gibbonSchoolYearID
+              AND mc.date IS NOT NULL
+              AND mc.date >= :dateStart
+              AND mc.date < :dateEnd
+              {$whereYearGroup}
+            ORDER BY mc.date, mc.sequenceNumber, mc.gibbonMarkbookColumnID
+        ";
+
+        return $this->db()->select($sql, $data)->fetchAll();
+    }
+
+    /**
      * Shared select block for planner entries and related course/class fields.
      *
      * Includes first related markbook column data via correlated subqueries.
@@ -210,6 +341,31 @@ class AcademicCalendarEventGateway extends QueryableGateway
                     GROUP BY gibbonPlannerEntryID
                 ) mbFirst ON mbFirst.firstMarkbookColumnID = mb1.gibbonMarkbookColumnID
             ) mb ON mb.gibbonPlannerEntryID = pe.gibbonPlannerEntryID
+        ";
+    }
+
+    /**
+     * Shared select block for markbook assessment calendar rows.
+     *
+     * @return string SQL select block.
+     */
+    private function baseAssessmentSql(): string
+    {
+        return "
+            SELECT DISTINCT
+                mc.gibbonMarkbookColumnID,
+                mc.gibbonCourseClassID,
+                mc.date AS assessmentDate,
+                mc.name AS assessmentName,
+                mc.description AS assessmentDescription,
+                mc.type AS assessmentType,
+                mc.columnColor AS assessmentColor,
+                c.gibbonYearGroupIDList,
+                c.nameShort AS courseNameShort,
+                cc.nameShort AS classNameShort
+            FROM gibbonMarkbookColumn mc
+            INNER JOIN gibbonCourseClass cc ON cc.gibbonCourseClassID = mc.gibbonCourseClassID
+            INNER JOIN gibbonCourse c ON c.gibbonCourseID = cc.gibbonCourseID
         ";
     }
 }

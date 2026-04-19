@@ -16,7 +16,7 @@ $description = 'Homework calendar for students, parents and staff.';
 $entryURL    = 'calendar_view.php';
 $type        = 'Additional';
 $category    = 'Learn';
-$version     = '0.1.1';
+$version     = '0.2.0';
 $author      = 'Steve Gillott';
 $url         = '';
 
@@ -27,6 +27,8 @@ $moduleTables = [];
 $gibbonSetting = [];
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'eventTypeColors', 'Event Type Colours', 'JSON map of event type to hex colour for Homework Calendar.', '{}');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'showWeekends', 'Show Weekends', 'Show weekends in the Homework Calendar.', 'Y');";
+$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'showHomeworkEvents', 'Show Homework Events', 'Show homework events in the Homework Calendar.', 'Y');";
+$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'showAssessmentEvents', 'Show Assessment Events', 'Show markbook assessment events in the Homework Calendar.', 'Y');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'defaultStaffView', 'Default Staff View', 'Default filter for staff in Homework Calendar.', 'all');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'gibbonYearGroupIDList', 'Year Groups', 'Academic Calendar is enabled for these year groups.', '');";
 

@@ -1,6 +1,17 @@
 CHANGELOG
 =========
 
+v0.2.0 (In Progress)
+--------------------
+- Added Markbook assessment events to the Homework Calendar feed (student, parent, staff).
+- Assessment events are rendered as all-day entries in FullCalendar.
+- Added module settings toggles:
+  - Show Homework Events
+  - Show Assessment Events
+- Added role-aware assessment click-through URLs to Markbook pages where accessible.
+- Updated staff year-group label rendering to prefer short names.
+- Added visual differentiation between homework and assessment events.
+
 v0.1.0 (2026-04-12)
 -------------------
 - Initial release of the Academic Calendar module.

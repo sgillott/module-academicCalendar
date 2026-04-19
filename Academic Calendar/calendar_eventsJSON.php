@@ -42,31 +42,51 @@ $settingGateway = $container->get(SettingGateway::class);
 $yearGroupGateway = $container->get(YearGroupGateway::class);
 $customColors = ac_getColorMap($settingGateway);
 $enabledYearGroupIDs = ac_getEnabledYearGroupIDs($settingGateway);
+$showHomeworkEvents = ac_getShowHomeworkEvents($settingGateway);
+$showAssessmentEvents = ac_getShowAssessmentEvents($settingGateway);
+$canViewMarkbook = isActionAccessible($guid, $connection2, '/modules/Markbook/markbook_view.php');
+$canEditMarkbookData = isActionAccessible($guid, $connection2, '/modules/Markbook/markbook_edit_data.php');
 
-$rows = [];
+$homeworkRows = [];
+$assessmentRows = [];
 if ($roleCategory === 'Student') {
-    $rows = $eventGateway->selectStudentEvents($gibbonSchoolYearID, $gibbonPersonID, $dateStart, $dateEnd);
+    if ($showHomeworkEvents) {
+        $homeworkRows = $eventGateway->selectStudentEvents($gibbonSchoolYearID, $gibbonPersonID, $dateStart, $dateEnd);
+    }
+    if ($showAssessmentEvents) {
+        $assessmentRows = $eventGateway->selectStudentAssessmentEvents($gibbonSchoolYearID, $gibbonPersonID, $dateStart, $dateEnd);
+    }
 } elseif ($roleCategory === 'Parent' && $childPersonID !== '') {
-    $rows = $eventGateway->selectParentEvents($gibbonSchoolYearID, $gibbonPersonID, $childPersonID, $dateStart, $dateEnd);
+    if ($showHomeworkEvents) {
+        $homeworkRows = $eventGateway->selectParentEvents($gibbonSchoolYearID, $gibbonPersonID, $childPersonID, $dateStart, $dateEnd);
+    }
+    if ($showAssessmentEvents) {
+        $assessmentRows = $eventGateway->selectParentAssessmentEvents($gibbonSchoolYearID, $gibbonPersonID, $childPersonID, $dateStart, $dateEnd);
+    }
 } elseif ($roleCategory === 'Staff') {
-    $rows = $eventGateway->selectStaffEvents($gibbonSchoolYearID, $dateStart, $dateEnd, $yearGroupID !== '' ? $yearGroupID : null);
+    if ($showHomeworkEvents) {
+        $homeworkRows = $eventGateway->selectStaffEvents($gibbonSchoolYearID, $dateStart, $dateEnd, $yearGroupID !== '' ? $yearGroupID : null);
+    }
+    if ($showAssessmentEvents) {
+        $assessmentRows = $eventGateway->selectStaffAssessmentEvents($gibbonSchoolYearID, $dateStart, $dateEnd, $yearGroupID !== '' ? $yearGroupID : null);
+    }
 }
-$rows = ac_filterEventRowsByEnabledYearGroups($rows, $enabledYearGroupIDs);
+$homeworkRows = ac_filterEventRowsByEnabledYearGroups($homeworkRows, $enabledYearGroupIDs);
+$assessmentRows = ac_filterEventRowsByEnabledYearGroups($assessmentRows, $enabledYearGroupIDs);
 
 $events = [];
 $absoluteURL = $session->get('absoluteURL');
 $yearGroupMap = [];
 if ($roleCategory === 'Staff') {
-    if (!empty($enabledYearGroupIDs)) {
-        $allYearGroups = $yearGroupGateway->selectYearGroupsByIDs($enabledYearGroupIDs)->fetchAll();
-    } else {
-        $allYearGroups = $yearGroupGateway->selectYearGroups()->fetchAll();
-    }
+    $criteria = $yearGroupGateway
+        ->newQueryCriteria(true)
+        ->sortBy(['sequenceNumber']);
+    $allYearGroups = $yearGroupGateway->queryYearGroups($criteria)->toArray();
     $allYearGroups = ac_normalizeYearGroupRows($allYearGroups);
     $allYearGroups = ac_filterYearGroupsByEnabled($allYearGroups, $enabledYearGroupIDs);
     $yearGroupMap = ac_buildYearGroupMap($allYearGroups);
 }
-foreach ($rows as $row) {
+foreach ($homeworkRows as $row) {
     $type = trim((string) ($row['markbookType'] ?? ''));
     if ($type === '') {
         $type = __('Homework');
@@ -131,6 +151,7 @@ foreach ($rows as $row) {
         'title' => $title,
         'start' => date('c', strtotime((string) $row['homeworkDueDateTime'])),
         'allDay' => false,
+        'classNames' => ['ac-event-homework'],
         'url' => $absoluteURL.'/index.php?'.http_build_query($query),
         'backgroundColor' => $color,
         'borderColor' => $color,
@@ -142,6 +163,103 @@ foreach ($rows as $row) {
             'source' => 'Planner',
         ],
     ];
+}
+
+foreach ($assessmentRows as $row) {
+    $type = trim((string) ($row['assessmentType'] ?? ''));
+    if ($type === '') {
+        $type = __('Assessment');
+    }
+
+    $assessmentTitle = trim((string) ($row['assessmentName'] ?? ''));
+    if ($assessmentTitle === '') {
+        $assessmentTitle = __('Assessment');
+    }
+
+    $courseShort = trim((string) ($row['courseNameShort'] ?? ''));
+    $classShort = trim((string) ($row['classNameShort'] ?? ''));
+    if ($courseShort !== '' && $classShort !== '') {
+        $subject = $courseShort.'.'.$classShort;
+    } else {
+        $subject = trim($courseShort.$classShort);
+    }
+    if ($subject === '') {
+        $subject = __('Assessment');
+    }
+
+    $title = $subject;
+    if ($assessmentTitle !== '' && mb_strtolower($assessmentTitle) !== mb_strtolower($subject)) {
+        $title .= ' - '.$assessmentTitle;
+    }
+
+    $yearGroupsText = '';
+    if ($roleCategory === 'Staff') {
+        $prefixes = [];
+        $yearGroupIDList = array_filter(array_map('trim', explode(',', (string) ($row['gibbonYearGroupIDList'] ?? ''))));
+        foreach ($yearGroupIDList as $groupID) {
+            if (isset($yearGroupMap[$groupID])) {
+                $prefixes[] = $yearGroupMap[$groupID];
+            }
+        }
+
+        if (!empty($prefixes)) {
+            $yearGroupsText = implode('/', $prefixes);
+            $title = '('.$yearGroupsText.') '.$title;
+        }
+    }
+
+    $color = ac_normalizeHexColor((string) ($row['assessmentColor'] ?? ''));
+    if ($color === null) {
+        $color = $customColors[$type] ?? ac_colorFromPalette($type);
+    }
+
+    $url = null;
+    if ($roleCategory === 'Staff') {
+        if ($canEditMarkbookData) {
+            $query = [
+                'q' => '/modules/Markbook/markbook_edit_data.php',
+                'gibbonCourseClassID' => (string) $row['gibbonCourseClassID'],
+                'gibbonMarkbookColumnID' => (string) $row['gibbonMarkbookColumnID'],
+            ];
+            $url = $absoluteURL.'/index.php?'.http_build_query($query);
+        } elseif ($canViewMarkbook) {
+            $url = $absoluteURL.'/index.php?q='.rawurlencode('/modules/Markbook/markbook_view.php');
+        }
+    } elseif ($roleCategory === 'Student' && $canViewMarkbook) {
+        $url = $absoluteURL.'/index.php?q='.rawurlencode('/modules/Markbook/markbook_view.php');
+    } elseif ($roleCategory === 'Parent' && $canViewMarkbook) {
+        $query = [
+            'q' => '/modules/Markbook/markbook_view.php',
+        ];
+        if ($childPersonID !== '') {
+            $query['search'] = $childPersonID;
+        }
+        $url = $absoluteURL.'/index.php?'.http_build_query($query);
+    }
+
+    $event = [
+        'id' => 'mbc-'.(string) $row['gibbonMarkbookColumnID'],
+        'title' => $title,
+        'start' => date('Y-m-d', strtotime((string) $row['assessmentDate'])),
+        'allDay' => true,
+        'classNames' => ['ac-event-assessment'],
+        'backgroundColor' => $color,
+        'borderColor' => $color,
+        'extendedProps' => [
+            'subject' => $subject,
+            'homeworkTitle' => $assessmentTitle,
+            'yearGroups' => $yearGroupsText,
+            'type' => $type,
+            'source' => 'Markbook',
+            'description' => trim((string) ($row['assessmentDescription'] ?? '')),
+        ],
+    ];
+
+    if (!empty($url)) {
+        $event['url'] = $url;
+    }
+
+    $events[] = $event;
 }
 
 echo json_encode($events);

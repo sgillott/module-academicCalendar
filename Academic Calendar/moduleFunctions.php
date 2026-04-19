@@ -127,6 +127,34 @@ function ac_getShowWeekends(SettingGateway $settingGateway): bool
 }
 
 /**
+ * Check whether homework events should be shown.
+ *
+ * @param SettingGateway $settingGateway Core setting gateway service.
+ *
+ * @return bool `true` unless setting explicitly equals `N`.
+ */
+function ac_getShowHomeworkEvents(SettingGateway $settingGateway): bool
+{
+    $value = (string) $settingGateway->getSettingByScope('Academic Calendar', 'showHomeworkEvents');
+
+    return $value !== 'N';
+}
+
+/**
+ * Check whether assessment events should be shown.
+ *
+ * @param SettingGateway $settingGateway Core setting gateway service.
+ *
+ * @return bool `true` unless setting explicitly equals `N`.
+ */
+function ac_getShowAssessmentEvents(SettingGateway $settingGateway): bool
+{
+    $value = (string) $settingGateway->getSettingByScope('Academic Calendar', 'showAssessmentEvents');
+
+    return $value !== 'N';
+}
+
+/**
  * Parse a CSV list of numeric IDs into a unique normalized array.
  *
  * @param string|null $list Comma-separated IDs.

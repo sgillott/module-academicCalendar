@@ -1,12 +1,12 @@
 ﻿# Academic Calendar (Gibbon Module)
 
-Academic Calendar adds a homework-focused calendar view to Gibbon for Students, Parents, and Staff.
+Academic Calendar adds a calendar view to Gibbon for Students, Parents, and Staff, combining Planner homework deadlines and Markbook assessment dates.
 
-It is built for Gibbon `v31.0.00+` and uses FullCalendar to display Planner homework due dates in month/week/list views, and is based on a module called "HomeworkCalendar" by JC Rozo.
+It is built for Gibbon `v31.0.00+`, uses FullCalendar, and is based on a module called "HomeworkCalendar" by JC Rozo.
 
 ## Features
 
-- Homework calendar view for:
+- Calendar view for:
   - Staff
   - Students
   - Parents
@@ -14,16 +14,19 @@ It is built for Gibbon `v31.0.00+` and uses FullCalendar to display Planner home
   - Staff Dashboard
   - Student Dashboard
   - Parental Dashboard
-- Data source from Planner homework due dates
+- Event sources:
+  - Planner homework due dates
+  - Markbook assessment dates (`gibbonMarkbookColumn`)
 - Role-aware filtering:
-  - Students: only their own classes
+  - Students: own classes
   - Parents: selected child
-  - Staff: all visible homework, with optional year-group filtering
+  - Staff: visible events with optional year-group filtering
 - Staff permission to filter by all year groups (`Homework Calendar_allYearGroups`)
-- Year-group enablement setting to scope the module rollout (for example, only G9-G12)
-- Event type color customization with Gibbon color picker + hex input
+- Year-group rollout control (`gibbonYearGroupIDList`)
+- Event color customization with Gibbon color picker + hex input
+- Assessment events rendered as all-day entries
+- Event click-through to Planner/Markbook pages based on role and access
 - Mobile-friendly toolbar behavior
-- Event click-through to Planner entry
 
 ## Module Structure
 
@@ -44,6 +47,8 @@ Main files:
 `Academic Calendar` scope settings:
 
 - `showWeekends` (`Y|N`)
+- `showHomeworkEvents` (`Y|N`)
+- `showAssessmentEvents` (`Y|N`)
 - `defaultStaffView` (`all|yearGroup`)
 - `eventTypeColors` (JSON map of event type -> hex color)
 - `gibbonYearGroupIDList` (CSV list of enabled year groups)
@@ -70,11 +75,12 @@ Actions defined in `manifest.php`:
 - Dashboard hook tabs are created by Gibbon core when the hook is accessible.
   - Per-user tab visibility cannot be fully suppressed from module hook include code alone.
   - For non-enabled year groups, the hook can show a warning message instead of calendar content.
-- The module relies on Planner homework data (`gibbonPlannerEntry`, `gibbonMarkbookColumn`).
+- Assessment entries use date-only values from Markbook and are rendered as all-day events.
+- To avoid duplicates, assessment rows linked to Planner entries are excluded from the assessment feed.
 
 ## Version
 
-Current module version: `0.1.0`
+Current module version: `0.2.0`
 
 ## License
 
