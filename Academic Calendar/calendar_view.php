@@ -38,12 +38,35 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
     $eventGateway = $container->get(AcademicCalendarEventGateway::class);
 
     $showWeekends = ac_getShowWeekends($settingGateway);
+    $showAssessmentEvents = ac_getShowAssessmentEvents($settingGateway);
     $defaultStaffView = (string) $settingGateway->getSettingByScope('Academic Calendar', 'defaultStaffView');
     $enabledYearGroupIDs = ac_getEnabledYearGroupIDs($settingGateway);
+    $eventTypeMeta = ac_getEventTypeMeta($settingGateway);
+    $defaultAssessmentFilter = ac_getDefaultAssessmentFilter($settingGateway);
+    $availableAssessmentClassifications = ac_getAvailableAssessmentClassifications($eventTypeMeta, true);
+    $showAssessmentFilterOptions = $showAssessmentEvents
+        && ($availableAssessmentClassifications['formative'] || $availableAssessmentClassifications['summative'] || $availableAssessmentClassifications['none']);
+
+    $assessmentFormative = strtoupper((string) ($_GET['assessmentFormative'] ?? $defaultAssessmentFilter['formative']));
+    $assessmentSummative = strtoupper((string) ($_GET['assessmentSummative'] ?? $defaultAssessmentFilter['summative']));
+    $assessmentNone = strtoupper((string) ($_GET['assessmentNone'] ?? $defaultAssessmentFilter['none']));
+    $assessmentFormative = $assessmentFormative === 'N' ? 'N' : 'Y';
+    $assessmentSummative = $assessmentSummative === 'N' ? 'N' : 'Y';
+    $assessmentNone = $assessmentNone === 'N' ? 'N' : 'Y';
+    if (!$availableAssessmentClassifications['formative']) {
+        $assessmentFormative = 'N';
+    }
+    if (!$availableAssessmentClassifications['summative']) {
+        $assessmentSummative = 'N';
+    }
+    if (!$availableAssessmentClassifications['none']) {
+        $assessmentNone = 'N';
+    }
 
     $yearGroupID = '';
     $yearGroups = [];
     if ($roleCategory === 'Staff') {
+        $hasYearGroupParam = array_key_exists('yearGroupID', $_GET);
         $canFilterAllYearGroups = isActionAccessible(
             $guid,
             $connection2,
@@ -67,7 +90,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
         if ($yearGroupID !== '' && !in_array($yearGroupID, $validYearGroups, true)) {
             $yearGroupID = '';
         }
-        if ($yearGroupID === '' && $defaultStaffView === 'yearGroup' && !empty($yearGroups)) {
+        if (!$hasYearGroupParam && $yearGroupID === '' && $defaultStaffView === 'yearGroup' && !empty($yearGroups)) {
             $yearGroupID = (string) $yearGroups[0]['gibbonYearGroupID'];
         }
     }
@@ -90,6 +113,14 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
 
     $firstDayOfTheWeek = $session->get('firstDayOfTheWeek', 'Sunday');
     $firstDay = $firstDayOfTheWeek === 'Monday' ? 1 : ($firstDayOfTheWeek === 'Saturday' ? 6 : 0);
+    $viewDate = trim((string) ($_GET['viewDate'] ?? ''));
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $viewDate)) {
+        $viewDate = '';
+    }
+    $viewType = trim((string) ($_GET['viewType'] ?? ''));
+    if (!in_array($viewType, ['dayGridMonth', 'timeGridWeek', 'listMonth'], true)) {
+        $viewType = '';
+    }
 
     $i18n = $session->get('i18n');
     $direction = ($i18n['rtl'] ?? 'N') === 'Y' ? 'rtl' : 'ltr';
@@ -124,11 +155,18 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
     if ($roleCategory === 'Staff' && !empty($yearGroups)) {
         echo '<form method="get" action="'.htmlspecialchars($formAction).'" class="acFilterRow">';
         echo '<input type="hidden" name="q" value="'.htmlspecialchars($route).'">';
+        echo '<input type="hidden" name="viewDate" value="'.htmlspecialchars($viewDate).'">';
+        echo '<input type="hidden" name="viewType" value="'.htmlspecialchars($viewType).'">';
         if ($isEmbed) {
             echo '<input type="hidden" name="embed" value="1">';
         }
+        if ($showAssessmentFilterOptions) {
+            echo '<input type="hidden" name="assessmentFormative" value="'.htmlspecialchars($assessmentFormative).'">';
+            echo '<input type="hidden" name="assessmentSummative" value="'.htmlspecialchars($assessmentSummative).'">';
+            echo '<input type="hidden" name="assessmentNone" value="'.htmlspecialchars($assessmentNone).'">';
+        }
         echo '<label for="yearGroupID"><strong>'.__('Year Group').':</strong></label> ';
-        echo '<select id="yearGroupID" name="yearGroupID" onchange="this.form.submit()">';
+        echo '<select id="yearGroupID" name="yearGroupID" onchange="window.acSubmitCalendarFilters(this.form)">';
         echo '<option value="">'.__('All').'</option>';
         foreach ($yearGroups as $group) {
             $id = (string) $group['gibbonYearGroupID'];
@@ -143,11 +181,18 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
     if ($roleCategory === 'Parent' && !$isEmbed) {
         echo '<form method="get" action="'.htmlspecialchars($formAction).'" class="acFilterRow">';
         echo '<input type="hidden" name="q" value="'.htmlspecialchars($route).'">';
+        echo '<input type="hidden" name="viewDate" value="'.htmlspecialchars($viewDate).'">';
+        echo '<input type="hidden" name="viewType" value="'.htmlspecialchars($viewType).'">';
         if ($isEmbed) {
             echo '<input type="hidden" name="embed" value="1">';
         }
+        if ($showAssessmentFilterOptions) {
+            echo '<input type="hidden" name="assessmentFormative" value="'.htmlspecialchars($assessmentFormative).'">';
+            echo '<input type="hidden" name="assessmentSummative" value="'.htmlspecialchars($assessmentSummative).'">';
+            echo '<input type="hidden" name="assessmentNone" value="'.htmlspecialchars($assessmentNone).'">';
+        }
         echo '<label for="childPersonID"><strong>'.__('Student').':</strong></label> ';
-        echo '<select id="childPersonID" name="childPersonID" onchange="this.form.submit()">';
+        echo '<select id="childPersonID" name="childPersonID" onchange="window.acSubmitCalendarFilters(this.form)">';
         foreach ($children as $child) {
             $id = (string) $child['childPersonID'];
             $name = trim((string) $child['preferredName'].' '.$child['surname']);
@@ -155,6 +200,37 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
             echo '<option value="'.htmlspecialchars($id).'"'.$selected.'>'.htmlspecialchars($name).'</option>';
         }
         echo '</select>';
+        echo '</form>';
+    }
+
+    if ($showAssessmentFilterOptions) {
+        echo '<form id="acAssessmentFilterForm" method="get" action="'.htmlspecialchars($formAction).'" class="acFilterRow acAssessmentFilterRow">';
+        echo '<input type="hidden" name="q" value="'.htmlspecialchars($route).'">';
+        echo '<input type="hidden" name="viewDate" value="'.htmlspecialchars($viewDate).'">';
+        echo '<input type="hidden" name="viewType" value="'.htmlspecialchars($viewType).'">';
+        if ($isEmbed) {
+            echo '<input type="hidden" name="embed" value="1">';
+        }
+        if ($roleCategory === 'Staff') {
+            echo '<input type="hidden" name="yearGroupID" value="'.htmlspecialchars($yearGroupID).'">';
+        }
+        if ($childPersonID !== '') {
+            echo '<input type="hidden" name="childPersonID" value="'.htmlspecialchars($childPersonID).'">';
+        }
+        echo '<input type="hidden" name="assessmentFormative" value="'.htmlspecialchars($assessmentFormative).'">';
+        echo '<input type="hidden" name="assessmentSummative" value="'.htmlspecialchars($assessmentSummative).'">';
+        echo '<input type="hidden" name="assessmentNone" value="'.htmlspecialchars($assessmentNone).'">';
+
+        echo '<span class="acAssessmentFilterLabel"><strong>'.__('Assessments').':</strong></span> ';
+        if ($availableAssessmentClassifications['formative']) {
+            echo '<label class="acAssessmentFilterOption"><input type="checkbox" class="acAssessmentFilterCheckbox acAssessmentFilterCheckboxFormative" '.($assessmentFormative === 'Y' ? 'checked ' : '').'onchange="this.form.assessmentFormative.value=this.checked?\'Y\':\'N\'; window.acSubmitCalendarFilters(this.form)"> <span>'.__('Formative').'</span></label> ';
+        }
+        if ($availableAssessmentClassifications['summative']) {
+            echo '<label class="acAssessmentFilterOption"><input type="checkbox" class="acAssessmentFilterCheckbox acAssessmentFilterCheckboxSummative" '.($assessmentSummative === 'Y' ? 'checked ' : '').'onchange="this.form.assessmentSummative.value=this.checked?\'Y\':\'N\'; window.acSubmitCalendarFilters(this.form)"> <span>'.__('Summative').'</span></label>';
+        }
+        if ($availableAssessmentClassifications['none']) {
+            echo '<label class="acAssessmentFilterOption"><input type="checkbox" class="acAssessmentFilterCheckbox acAssessmentFilterCheckboxNone" '.($assessmentNone === 'Y' ? 'checked ' : '').'onchange="this.form.assessmentNone.value=this.checked?\'Y\':\'N\'; window.acSubmitCalendarFilters(this.form)"> <span>'.__('Not Classified').'</span></label>';
+        }
         echo '</form>';
     }
 
@@ -169,11 +245,63 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
             const isEmbed = <?= $isEmbed ? 'true' : 'false' ?>;
             const params = {
                 yearGroupID: '<?= htmlspecialchars($yearGroupID, ENT_QUOTES); ?>',
-                childPersonID: '<?= htmlspecialchars($childPersonID, ENT_QUOTES); ?>'
+                childPersonID: '<?= htmlspecialchars($childPersonID, ENT_QUOTES); ?>',
+                assessmentFormative: '<?= htmlspecialchars($assessmentFormative, ENT_QUOTES); ?>',
+                assessmentSummative: '<?= htmlspecialchars($assessmentSummative, ENT_QUOTES); ?>',
+                assessmentNone: '<?= htmlspecialchars($assessmentNone, ENT_QUOTES); ?>'
             };
             let calendar = null;
             let resizeBound = false;
+            let resizeTimer = null;
+            let resizeObserver = null;
             let bootAttempts = 0;
+            let assessmentFiltersMoved = false;
+
+            function runCalendarResize() {
+                if (!calendar) {
+                    return;
+                }
+
+                window.requestAnimationFrame(function () {
+                    if (!calendar) {
+                        return;
+                    }
+                    calendar.updateSize();
+                });
+            }
+
+            function scheduleCalendarResize() {
+                if (!calendar) {
+                    return;
+                }
+
+                if (resizeTimer) {
+                    window.clearTimeout(resizeTimer);
+                }
+
+                runCalendarResize();
+
+                window.setTimeout(function () {
+                    if (!calendar) {
+                        return;
+                    }
+                    calendar.updateSize();
+                }, 100);
+
+                window.setTimeout(function () {
+                    if (!calendar) {
+                        return;
+                    }
+                    calendar.updateSize();
+                }, 300);
+
+                resizeTimer = window.setTimeout(function () {
+                    if (!calendar) {
+                        return;
+                    }
+                    calendar.updateSize();
+                }, 700);
+            }
 
             function headerToolbarForSize() {
                 if (window.innerWidth < 600) {
@@ -212,7 +340,35 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
 
                     calendar.setOption('headerToolbar', headerToolbarForSize());
                     calendar.changeView(window.innerWidth < 765 ? 'listMonth' : 'dayGridMonth');
+                    window.setTimeout(function () {
+                        positionAssessmentFilters();
+                        scheduleCalendarResize();
+                    }, 0);
                 });
+
+                if (typeof ResizeObserver !== 'undefined' && calendarElement && calendarElement.parentElement) {
+                    resizeObserver = new ResizeObserver(function () {
+                        scheduleCalendarResize();
+                    });
+                    resizeObserver.observe(calendarElement.parentElement);
+                }
+            }
+
+            function positionAssessmentFilters() {
+                const filterForm = document.getElementById('acAssessmentFilterForm');
+                if (!filterForm || !calendarElement) {
+                    return;
+                }
+
+                const toolbar = calendarElement.querySelector('.fc .fc-header-toolbar');
+                if (!toolbar) {
+                    return;
+                }
+
+                filterForm.classList.add('acAssessmentFilterRowPlaced');
+                toolbar.insertAdjacentElement('afterend', filterForm);
+                assessmentFiltersMoved = true;
+                scheduleCalendarResize();
             }
 
             function initCalendar() {
@@ -237,15 +393,34 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                         locale: '<?= $locale ?>',
                         weekends: <?= $showWeekends ? 'true' : 'false' ?>,
                         height: 'auto',
-                        initialView: window.innerWidth < 765 ? 'listMonth' : 'dayGridMonth',
+                        initialView: '<?= $viewType !== '' ? $viewType : '' ?>' || (window.innerWidth < 765 ? 'listMonth' : 'dayGridMonth'),
+                        initialDate: '<?= $viewDate !== '' ? $viewDate : '' ?>' || undefined,
                         headerToolbar: headerToolbarForSize(),
                         eventSources: [{
                             url: endpoint,
                             method: 'GET',
                             extraParams: params
                         }],
+                        datesSet: function () {
+                            scheduleCalendarResize();
+                        },
+                        eventsSet: function () {
+                            scheduleCalendarResize();
+                        },
                         eventDidMount: function (info) {
                             const props = info.event.extendedProps || {};
+                            if (props.source === 'Markbook') {
+                                info.el.style.border = 'none';
+                                info.el.style.borderWidth = '0';
+                                info.el.style.boxShadow = 'none';
+
+                                const main = info.el.querySelector('.fc-event-main');
+                                if (main) {
+                                    main.style.border = 'none';
+                                    main.style.borderWidth = '0';
+                                    main.style.boxShadow = 'none';
+                                }
+                            }
                             const lines = [];
                             const due = info.event.start ? FullCalendar.formatDate(info.event.start, info.event.allDay ? {
                                 year: 'numeric',
@@ -263,7 +438,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                             if (props.subject) {
                                 lines.push(props.subject);
                             }
-                            if (props.homeworkTitle) {
+                            if (props.homeworkTitle && props.homeworkTitle !== props.subject) {
                                 lines.push(props.homeworkTitle);
                             }
                             if (props.description) {
@@ -274,6 +449,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                             }
                             if (props.type) {
                                 lines.push('<?= htmlspecialchars(__('Type'), ENT_QUOTES); ?>: ' + props.type);
+                            }
+                            if (props.classification) {
+                                lines.push('<?= htmlspecialchars(__('Assessment Classification'), ENT_QUOTES); ?>: ' + props.classification);
                             }
                             if (due) {
                                 lines.push('<?= htmlspecialchars(__('Due'), ENT_QUOTES); ?>: ' + due);
@@ -296,6 +474,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                     });
 
                     calendar.render();
+                    positionAssessmentFilters();
+                    scheduleCalendarResize();
                     bindResize();
                     return true;
                 } catch (error) {
@@ -315,8 +495,73 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                 }
             }
 
+            function persistCalendarStateToForm(form) {
+                if (!form || !calendar) {
+                    return;
+                }
+
+                const currentDate = calendar.getDate();
+                if (!currentDate) {
+                    return;
+                }
+
+                const pad = function (value) {
+                    return String(value).padStart(2, '0');
+                };
+                const dateValue = currentDate.getFullYear() + '-' + pad(currentDate.getMonth() + 1) + '-' + pad(currentDate.getDate());
+
+                let viewDateInput = form.querySelector('input[name="viewDate"]');
+                if (!viewDateInput) {
+                    viewDateInput = document.createElement('input');
+                    viewDateInput.type = 'hidden';
+                    viewDateInput.name = 'viewDate';
+                    form.appendChild(viewDateInput);
+                }
+                viewDateInput.value = dateValue;
+
+                let viewTypeInput = form.querySelector('input[name="viewType"]');
+                if (!viewTypeInput) {
+                    viewTypeInput = document.createElement('input');
+                    viewTypeInput.type = 'hidden';
+                    viewTypeInput.name = 'viewType';
+                    form.appendChild(viewTypeInput);
+                }
+                viewTypeInput.value = calendar.view ? calendar.view.type : '';
+            }
+
+            window.acSubmitCalendarFilters = function (form) {
+                persistCalendarStateToForm(form);
+                if (!form) {
+                    return;
+                }
+
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit();
+                } else {
+                    form.submit();
+                }
+            };
+
+            function bindFilterStatePersistence() {
+                const forms = Array.prototype.slice.call(document.querySelectorAll('form.acFilterRow, form#acAssessmentFilterForm'));
+                forms.forEach(function (form) {
+                    form.addEventListener('submit', function () {
+                        persistCalendarStateToForm(form);
+                    });
+                });
+            }
+
             bootCalendar();
+            bindFilterStatePersistence();
             window.addEventListener('load', bootCalendar, { once: true });
+            document.addEventListener('visibilitychange', function () {
+                if (!document.hidden) {
+                    scheduleCalendarResize();
+                }
+            });
+            if (!assessmentFiltersMoved) {
+                window.setTimeout(positionAssessmentFilters, 200);
+            }
         })();
     </script>
     <?php

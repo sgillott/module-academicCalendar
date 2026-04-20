@@ -91,6 +91,172 @@ function ac_getColorMap(SettingGateway $settingGateway): array
 }
 
 /**
+ * Decode and sanitize the event-type metadata JSON.
+ *
+ * Expected format:
+ * `{eventType: {"visible":"Y|N","classification":"|formative|summative"}}`.
+ *
+ * @param string|null $json JSON string from module settings.
+ *
+ * @return array<string, array{visible:string,classification:string}>
+ */
+function ac_decodeEventTypeMeta(?string $json): array
+{
+    if (empty($json)) {
+        return [];
+    }
+
+    $map = json_decode($json, true);
+    if (!is_array($map)) {
+        return [];
+    }
+
+    $clean = [];
+    foreach ($map as $key => $value) {
+        $type = trim((string) $key);
+        if ($type === '' || !is_array($value)) {
+            continue;
+        }
+
+        $visible = strtoupper((string) ($value['visible'] ?? 'Y'));
+        $visible = $visible === 'N' ? 'N' : 'Y';
+
+        $classification = strtolower(trim((string) ($value['classification'] ?? '')));
+        if (!in_array($classification, ['', 'formative', 'summative'], true)) {
+            $classification = '';
+        }
+
+        $clean[$type] = [
+            'visible' => $visible,
+            'classification' => $classification,
+        ];
+    }
+
+    return $clean;
+}
+
+/**
+ * Retrieve saved event-type metadata from module settings.
+ *
+ * @param SettingGateway $settingGateway Core setting gateway service.
+ *
+ * @return array<string, array{visible:string,classification:string}>
+ */
+function ac_getEventTypeMeta(SettingGateway $settingGateway): array
+{
+    $value = $settingGateway->getSettingByScope('Academic Calendar', 'eventTypeMeta');
+
+    return ac_decodeEventTypeMeta($value ?: '');
+}
+
+/**
+ * Decode and sanitize default assessment filter JSON.
+ *
+ * Expected format: {"formative":"Y|N","summative":"Y|N","none":"Y|N"}.
+ *
+ * @param string|null $json JSON string from module settings.
+ *
+ * @return array{formative:string,summative:string,none:string}
+ */
+function ac_decodeDefaultAssessmentFilter(?string $json): array
+{
+    $defaults = [
+        'formative' => 'Y',
+        'summative' => 'Y',
+        'none' => 'Y',
+    ];
+
+    if (empty($json)) {
+        return $defaults;
+    }
+
+    $data = json_decode($json, true);
+    if (!is_array($data)) {
+        return $defaults;
+    }
+
+    $formative = strtoupper((string) ($data['formative'] ?? 'Y'));
+    $summative = strtoupper((string) ($data['summative'] ?? 'Y'));
+    $none = strtoupper((string) ($data['none'] ?? 'Y'));
+
+    $defaults['formative'] = $formative === 'N' ? 'N' : 'Y';
+    $defaults['summative'] = $summative === 'N' ? 'N' : 'Y';
+    $defaults['none'] = $none === 'N' ? 'N' : 'Y';
+
+    return $defaults;
+}
+
+/**
+ * Retrieve default assessment filter settings.
+ *
+ * @param SettingGateway $settingGateway Core setting gateway service.
+ *
+ * @return array{formative:string,summative:string,none:string}
+ */
+function ac_getDefaultAssessmentFilter(SettingGateway $settingGateway): array
+{
+    $value = $settingGateway->getSettingByScope('Academic Calendar', 'defaultAssessmentFilter');
+
+    return ac_decodeDefaultAssessmentFilter($value ?: '');
+}
+
+/**
+ * Determine if any event types are classified as formative or summative.
+ *
+ * @param array<string, array{visible:string,classification:string}> $meta
+ *
+ * @return bool
+ */
+function ac_hasAssessmentClassifications(array $meta): bool
+{
+    foreach ($meta as $row) {
+        $classification = (string) ($row['classification'] ?? '');
+        if ($classification === 'formative' || $classification === 'summative') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Get available assessment classifications from event-type metadata.
+ *
+ * By default, hidden types (`visible = N`) are ignored.
+ *
+ * @param array<string, array{visible:string,classification:string}> $meta
+ * @param bool $visibleOnly When true, only include visible types.
+ *
+ * @return array{formative:bool,summative:bool,none:bool}
+ */
+function ac_getAvailableAssessmentClassifications(array $meta, bool $visibleOnly = true): array
+{
+    $available = [
+        'formative' => false,
+        'summative' => false,
+        'none' => false,
+    ];
+
+    foreach ($meta as $row) {
+        $visible = strtoupper((string) ($row['visible'] ?? 'Y'));
+        if ($visibleOnly && $visible === 'N') {
+            continue;
+        }
+
+        $classification = (string) ($row['classification'] ?? '');
+        if ($classification === 'formative') {
+            $available['formative'] = true;
+        } elseif ($classification === 'summative') {
+            $available['summative'] = true;
+        } else {
+            $available['none'] = true;
+        }
+    }
+
+    return $available;
+}
+
+/**
  * Pick a deterministic fallback color for an event key.
  *
  * Uses a stable hash so each key always maps to the same color

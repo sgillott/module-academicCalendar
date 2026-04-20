@@ -318,7 +318,9 @@ class AcademicCalendarEventGateway extends QueryableGateway
                 pe.homeworkDueDateTime,
                 pe.name AS homeworkName,
                 c.gibbonYearGroupIDList,
+                c.name AS courseName,
                 c.nameShort AS courseNameShort,
+                cc.name AS className,
                 cc.nameShort AS classNameShort,
                 mb.gibbonMarkbookColumnID AS markbookColumnID,
                 mb.name AS markbookName,
@@ -361,7 +363,9 @@ class AcademicCalendarEventGateway extends QueryableGateway
                 mc.type AS assessmentType,
                 mc.columnColor AS assessmentColor,
                 c.gibbonYearGroupIDList,
+                c.name AS courseName,
                 c.nameShort AS courseNameShort,
+                cc.name AS className,
                 cc.nameShort AS classNameShort
             FROM gibbonMarkbookColumn mc
             INNER JOIN gibbonCourseClass cc ON cc.gibbonCourseClassID = mc.gibbonCourseClassID

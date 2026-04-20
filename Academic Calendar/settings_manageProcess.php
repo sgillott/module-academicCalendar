@@ -32,6 +32,15 @@ $showAssessmentEvents = $showAssessmentEvents === 'N' ? 'N' : 'Y';
 
 $defaultStaffView = (string) ($_POST['defaultStaffView'] ?? 'all');
 $defaultStaffView = $defaultStaffView === 'yearGroup' ? 'yearGroup' : 'all';
+$defaultAssessmentFilterPosted = $_POST['defaultAssessmentFilter'] ?? [];
+if (!is_array($defaultAssessmentFilterPosted)) {
+    $defaultAssessmentFilterPosted = [];
+}
+$defaultAssessmentFilter = [
+    'formative' => in_array('formative', $defaultAssessmentFilterPosted, true) ? 'Y' : 'N',
+    'summative' => in_array('summative', $defaultAssessmentFilterPosted, true) ? 'Y' : 'N',
+    'none' => in_array('none', $defaultAssessmentFilterPosted, true) ? 'Y' : 'N',
+];
 $enabledYearGroups = $_POST['gibbonYearGroupIDList'] ?? [];
 if (!is_array($enabledYearGroups)) {
     $enabledYearGroups = [];
@@ -77,6 +86,38 @@ if (empty($assessmentSetting)) {
     $partialFail = !$insertSuccess || $partialFail;
 }
 
+$eventTypeMetaSetting = $settingGateway->getSettingByScope('Academic Calendar', 'eventTypeMeta', true);
+if (empty($eventTypeMetaSetting)) {
+    $insertSuccess = $pdo->statement(
+        "INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+         VALUES (:scope, :name, :nameDisplay, :description, :value)",
+        [
+            'scope' => 'Academic Calendar',
+            'name' => 'eventTypeMeta',
+            'nameDisplay' => 'Event Type Meta',
+            'description' => 'JSON map of event type visibility and classification metadata.',
+            'value' => '{}',
+        ]
+    );
+    $partialFail = !$insertSuccess || $partialFail;
+}
+
+$defaultAssessmentFilterSetting = $settingGateway->getSettingByScope('Academic Calendar', 'defaultAssessmentFilter', true);
+if (empty($defaultAssessmentFilterSetting)) {
+    $insertSuccess = $pdo->statement(
+        "INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+         VALUES (:scope, :name, :nameDisplay, :description, :value)",
+        [
+            'scope' => 'Academic Calendar',
+            'name' => 'defaultAssessmentFilter',
+            'nameDisplay' => 'Default Assessment Filter',
+            'description' => 'Default user filter for formative and summative assessment events.',
+            'value' => '{"formative":"Y","summative":"Y","none":"Y"}',
+        ]
+    );
+    $partialFail = !$insertSuccess || $partialFail;
+}
+
 $yearGroupSetting = $settingGateway->getSettingByScope('Academic Calendar', 'gibbonYearGroupIDList', true);
 if (empty($yearGroupSetting)) {
     $insertSuccess = $pdo->statement(
@@ -95,6 +136,7 @@ if (empty($yearGroupSetting)) {
 
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'showHomeworkEvents', $showHomeworkEvents) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'showAssessmentEvents', $showAssessmentEvents) || $partialFail;
+$partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'defaultAssessmentFilter', json_encode($defaultAssessmentFilter)) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'gibbonYearGroupIDList', $enabledYearGroupIDList) || $partialFail;
 
 $types = $pdo->select("
@@ -104,17 +146,46 @@ $types = $pdo->select("
     ORDER BY type
 ")->fetchAll(\PDO::FETCH_COLUMN);
 
+$postedColors = $_POST['typeColor'] ?? [];
+if (!is_array($postedColors)) {
+    $postedColors = [];
+}
+
+$postedVisible = $_POST['typeVisible'] ?? [];
+if (!is_array($postedVisible)) {
+    $postedVisible = [];
+}
+
+$postedClassifications = $_POST['typeClassification'] ?? [];
+if (!is_array($postedClassifications)) {
+    $postedClassifications = [];
+}
+
 $colors = [];
+$meta = [];
 foreach ($types as $type) {
     $type = (string) $type;
-    $field = 'typeColor_'.md5($type);
-    $color = ac_normalizeHexColor((string) ($_POST[$field] ?? ''));
+    $hash = md5($type);
+
+    $color = ac_normalizeHexColor((string) ($postedColors[$hash] ?? ''));
     if ($color !== null) {
         $colors[$type] = $color;
     }
+
+    $visible = isset($postedVisible[$hash]) && (string) $postedVisible[$hash] === 'Y' ? 'Y' : 'N';
+    $classification = strtolower(trim((string) ($postedClassifications[$hash] ?? '')));
+    if (!in_array($classification, ['', 'formative', 'summative'], true)) {
+        $classification = '';
+    }
+
+    $meta[$type] = [
+        'visible' => $visible,
+        'classification' => $classification,
+    ];
 }
 
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'eventTypeColors', json_encode($colors)) || $partialFail;
+$partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'eventTypeMeta', json_encode($meta)) || $partialFail;
 
 $URL .= $partialFail ? '&return=error2' : '&return=success0';
 header("Location: {$URL}");

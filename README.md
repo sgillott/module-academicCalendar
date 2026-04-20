@@ -19,13 +19,20 @@ It is built for Gibbon `v31.0.00+`, uses FullCalendar, and is based on a module 
   - Markbook assessment dates (`gibbonMarkbookColumn`)
 - Role-aware filtering:
   - Students: own classes
-  - Parents: selected child
-  - Staff: visible events with optional year-group filtering
-- Staff permission to filter by all year groups (`Homework Calendar_allYearGroups`)
+  - Parents: selected student
+  - Staff: optional year-group filtering, with permission-based access to all year groups
 - Year-group rollout control (`gibbonYearGroupIDList`)
-- Event color customization with Gibbon color picker + hex input
-- Assessment events rendered as all-day entries
-- Event click-through to Planner/Markbook pages based on role and access
+- Event type configuration in settings:
+  - Colour (Gibbon colour picker + hex)
+  - Visible (`Y|N`) for assessment event types
+  - Assessment classification (`None|Formative|Summative`)
+- Assessment filter controls in calendar view:
+  - Formative
+  - Summative
+  - Not Classified
+- Filter state persistence when changing dropdowns/checkboxes:
+  - keeps current month/view (`month|week|list`) rather than jumping to today
+- Role-aware click-through to Planner/Markbook pages based on access
 - Mobile-friendly toolbar behavior
 
 ## Module Structure
@@ -33,6 +40,7 @@ It is built for Gibbon `v31.0.00+`, uses FullCalendar, and is based on a module 
 Main files:
 
 - `manifest.php` - module metadata, actions, settings, hooks
+- `CHANGEDB.php` - incremental database setting changes for released versions
 - `calendar_view.php` - primary calendar page
 - `calendar_eventsJSON.php` - JSON event endpoint for FullCalendar
 - `moduleFunctions.php` - shared helpers
@@ -50,7 +58,9 @@ Main files:
 - `showHomeworkEvents` (`Y|N`)
 - `showAssessmentEvents` (`Y|N`)
 - `defaultStaffView` (`all|yearGroup`)
-- `eventTypeColors` (JSON map of event type -> hex color)
+- `defaultAssessmentFilter` (JSON: `formative|summative|none` => `Y|N`)
+- `eventTypeColors` (JSON map: event type -> hex color)
+- `eventTypeMeta` (JSON map: event type -> `{visible, classification}`)
 - `gibbonYearGroupIDList` (CSV list of enabled year groups)
 
 ## Permissions and Actions
@@ -73,14 +83,13 @@ Actions defined in `manifest.php`:
 ## Notes and Known Behavior
 
 - Dashboard hook tabs are created by Gibbon core when the hook is accessible.
-  - Per-user tab visibility cannot be fully suppressed from module hook include code alone.
-  - For non-enabled year groups, the hook can show a warning message instead of calendar content.
 - Assessment entries use date-only values from Markbook and are rendered as all-day events.
+- Homework visibility is not suppressed by assessment-type visibility settings.
 - To avoid duplicates, assessment rows linked to Planner entries are excluded from the assessment feed.
 
 ## Version
 
-Current module version: `0.2.0`
+Current module version: `0.3.00`
 
 ## License
 

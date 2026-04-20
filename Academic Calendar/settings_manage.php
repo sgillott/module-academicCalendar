@@ -22,9 +22,11 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $settingGateway = $container->get(SettingGateway::class);
 
     $colors = ac_getColorMap($settingGateway);
+    $typeMeta = ac_getEventTypeMeta($settingGateway);
     $showWeekends = (string) $settingGateway->getSettingByScope('Academic Calendar', 'showWeekends');
     $showHomeworkEvents = (string) $settingGateway->getSettingByScope('Academic Calendar', 'showHomeworkEvents');
     $showAssessmentEvents = (string) $settingGateway->getSettingByScope('Academic Calendar', 'showAssessmentEvents');
+    $defaultAssessmentFilter = ac_getDefaultAssessmentFilter($settingGateway);
     $defaultStaffView = (string) $settingGateway->getSettingByScope('Academic Calendar', 'defaultStaffView');
     $enabledYearGroupIDList = (string) ($settingGateway->getSettingByScope('Academic Calendar', 'gibbonYearGroupIDList') ?: '');
 
@@ -55,6 +57,20 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $row->addYesNo('showAssessmentEvents')->selected($showAssessmentEvents === 'N' ? 'N' : 'Y');
 
     $row = $form->addRow();
+    $row->addLabel('defaultAssessmentFilter', __('Default Assessment Filter'))
+        ->description(__('Default user filter for formative and summative assessment events.'));
+    $row->addCheckbox('defaultAssessmentFilter')
+        ->fromArray([
+            'formative' => __('Formative'),
+            'summative' => __('Summative'),
+            'none' => __('Not Classified'),
+        ])
+        ->checked(array_keys(array_filter($defaultAssessmentFilter, function ($value) {
+            return strtoupper((string) $value) === 'Y';
+        })))
+        ->addCheckAllNone();
+
+    $row = $form->addRow();
     $row->addLabel('defaultStaffView', __('Default Staff View'));
     $row->addSelect('defaultStaffView')->fromArray([
         'all' => __('All Homework'),
@@ -73,20 +89,54 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     }
 
     $row = $form->addRow();
-    $row->addHeading(__('Event Type Colours'));
+    $row->addHeading(__('Event Types'));
 
-    foreach ($types as $type) {
-        $type = (string) $type;
-        $name = 'typeColor_'.md5($type);
-        $defaultColor = $colors[$type] ?? ac_colorFromPalette($type);
+    $row = $form->addRow();
+    $row->addContent(__('Configure colour, visibility, and assessment classification for each markbook event type.'));
 
+    if (!empty($types)) {
+        $table = $form->addRow()->addTable('acEventTypesTable')->addClass('colorOddEven acEventTypesTable');
+
+        $header = $table->addHeaderRow();
+        $header->addContent(__('Type'));
+        $header->addContent(__('Colour'));
+        $header->addContent(__('Assessment Classification'));
+        $header->addContent(__('Visible'));
+        $header->addCheckbox('acCheckAllEventTypes')->setClass('floatNone textCenter checkall acEventTypesCheckAll');
+
+        foreach ($types as $type) {
+            $type = (string) $type;
+            $hash = md5($type);
+            $colorField = 'typeColor['.$hash.']';
+            $visibleField = 'typeVisible['.$hash.']';
+            $classificationField = 'typeClassification['.$hash.']';
+
+            $defaultColor = $colors[$type] ?? ac_colorFromPalette($type);
+            $visible = strtoupper((string) ($typeMeta[$type]['visible'] ?? 'Y'));
+            $classification = strtolower((string) ($typeMeta[$type]['classification'] ?? ''));
+            if (!in_array($classification, ['', 'formative', 'summative'], true)) {
+                $classification = '';
+            }
+
+            $row = $table->addRow();
+            $row->addClass('acEventTypeRow');
+            $row->addContent($type);
+            $row->addColor($colorField)
+                ->setPalette('background')
+                ->setOuterClass('acColorSetting')
+                ->addClass('acColorSettingInput')
+                ->setValue($defaultColor);
+            $row->addSelect($classificationField)->fromArray([
+                '' => __('None'),
+                'formative' => __('Formative'),
+                'summative' => __('Summative'),
+            ])->selected($classification)->addClass('w-48');
+            $row->addContent('');
+            $row->addCheckbox($visibleField)->setValue('Y')->checked($visible === 'Y' ? 'Y' : '')->addClass('acEventTypeVisible')->alignCenter();
+        }
+    } else {
         $row = $form->addRow();
-        $row->addLabel($name, $type);
-        $row->addColor($name)
-            ->setPalette('background')
-            ->setOuterClass('ml-auto acColorSetting')
-            ->addClass('acColorSettingInput')
-            ->setValue($defaultColor);
+        $row->addContent(__('No markbook event types were found.'));
     }
 
     $row = $form->addRow();
@@ -94,4 +144,67 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $row->addSubmit();
 
     echo $form->getOutput();
+    ?>
+    <script>
+    (function () {
+        var table = document.getElementById('acEventTypesTable');
+        if (!table) return;
+
+        var checkAll = table.querySelector('input.acEventTypesCheckAll[type="checkbox"]');
+        var boxes = function () {
+            return Array.prototype.slice.call(table.querySelectorAll('input.acEventTypeVisible[type="checkbox"], .acEventTypeVisible input[type="checkbox"]'));
+        };
+        var classificationSelects = Array.prototype.slice.call(table.querySelectorAll('select[name^="typeClassification["]'));
+
+        var updateCheckAllState = function () {
+            if (!checkAll) return;
+            var visibleBoxes = boxes();
+            var checkedCount = visibleBoxes.filter(function (box) {
+                return box.checked;
+            }).length;
+
+            checkAll.checked = visibleBoxes.length > 0 && checkedCount === visibleBoxes.length;
+            checkAll.indeterminate = checkedCount > 0 && checkedCount < visibleBoxes.length;
+        };
+
+        var updateClassificationStyle = function (selectEl) {
+            if (!selectEl) return;
+
+            var row = selectEl.closest('tr');
+            if (!row) return;
+
+            row.classList.remove('acClassificationNone', 'acClassificationFormative', 'acClassificationSummative');
+            row.classList.add('acClassificationNone');
+            if (selectEl.value === 'formative') {
+                row.classList.remove('acClassificationNone');
+                row.classList.add('acClassificationFormative');
+            } else if (selectEl.value === 'summative') {
+                row.classList.remove('acClassificationNone');
+                row.classList.add('acClassificationSummative');
+            }
+        };
+
+        if (checkAll) {
+            checkAll.addEventListener('change', function () {
+                boxes().forEach(function (box) {
+                    box.checked = !!checkAll.checked;
+                });
+                updateCheckAllState();
+            });
+        }
+
+        boxes().forEach(function (box) {
+            box.addEventListener('change', updateCheckAllState);
+        });
+        updateCheckAllState();
+
+        classificationSelects.forEach(function (selectEl) {
+            updateClassificationStyle(selectEl);
+            selectEl.addEventListener('change', function () {
+                updateClassificationStyle(selectEl);
+            });
+        });
+    })();
+    </script>
+    <?php
 }

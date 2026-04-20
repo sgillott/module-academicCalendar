@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-v0.2.0 (In Progress)
+v0.3.0 (In Progress)
 --------------------
 - Added Markbook assessment events to the Homework Calendar feed (student, parent, staff).
 - Assessment events are rendered as all-day entries in FullCalendar.
@@ -11,6 +11,11 @@ v0.2.0 (In Progress)
 - Added role-aware assessment click-through URLs to Markbook pages where accessible.
 - Updated staff year-group label rendering to prefer short names.
 - Added visual differentiation between homework and assessment events.
+- Added per-user formative/summative assessment filter controls on the calendar view.
+- Added per-user `Not Classified` assessment filter control on the calendar view.
+- Added event-type metadata settings (visibility + assessment classification) in Manage Settings.
+- Cleaned up calendar event CSS to stabilize day-grid layout and prevent right-column overflow.
+- Reverted experimental event-border styling in the calendar grid to keep homework vs assessment rendering clear.
 
 v0.1.0 (2026-04-12)
 -------------------

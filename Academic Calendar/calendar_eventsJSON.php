@@ -41,9 +41,17 @@ $eventGateway = $container->get(AcademicCalendarEventGateway::class);
 $settingGateway = $container->get(SettingGateway::class);
 $yearGroupGateway = $container->get(YearGroupGateway::class);
 $customColors = ac_getColorMap($settingGateway);
+$eventTypeMeta = ac_getEventTypeMeta($settingGateway);
+$defaultAssessmentFilter = ac_getDefaultAssessmentFilter($settingGateway);
 $enabledYearGroupIDs = ac_getEnabledYearGroupIDs($settingGateway);
 $showHomeworkEvents = ac_getShowHomeworkEvents($settingGateway);
 $showAssessmentEvents = ac_getShowAssessmentEvents($settingGateway);
+$assessmentFormative = strtoupper((string) ($_GET['assessmentFormative'] ?? $defaultAssessmentFilter['formative']));
+$assessmentSummative = strtoupper((string) ($_GET['assessmentSummative'] ?? $defaultAssessmentFilter['summative']));
+$assessmentNone = strtoupper((string) ($_GET['assessmentNone'] ?? $defaultAssessmentFilter['none']));
+$assessmentFormative = $assessmentFormative === 'N' ? 'N' : 'Y';
+$assessmentSummative = $assessmentSummative === 'N' ? 'N' : 'Y';
+$assessmentNone = $assessmentNone === 'N' ? 'N' : 'Y';
 $canViewMarkbook = isActionAccessible($guid, $connection2, '/modules/Markbook/markbook_view.php');
 $canEditMarkbookData = isActionAccessible($guid, $connection2, '/modules/Markbook/markbook_edit_data.php');
 
@@ -86,27 +94,58 @@ if ($roleCategory === 'Staff') {
     $allYearGroups = ac_filterYearGroupsByEnabled($allYearGroups, $enabledYearGroupIDs);
     $yearGroupMap = ac_buildYearGroupMap($allYearGroups);
 }
+
+$buildSubjectParts = function (array $row) {
+    $courseName = trim((string) ($row['courseName'] ?? ''));
+    $courseShort = trim((string) ($row['courseNameShort'] ?? ''));
+    $classShort = trim((string) ($row['classNameShort'] ?? ''));
+
+    $subjectName = $courseName !== '' ? $courseName : '';
+    $subjectCode = '';
+    if ($courseShort !== '' && $classShort !== '') {
+        $subjectCode = $courseShort.'.'.$classShort;
+    } else {
+        $subjectCode = trim($courseShort.$classShort);
+    }
+
+    if ($subjectName === '') {
+        $subjectName = $subjectCode;
+    }
+    if ($subjectCode === '') {
+        $subjectCode = $subjectName;
+    }
+
+    return [$subjectName, $subjectCode];
+};
+
+$buildSubjectLabel = function (array $row, string $fallbackLabel) use ($buildSubjectParts, $roleCategory) {
+    [$subjectName, $subjectCode] = $buildSubjectParts($row);
+
+    if ($subjectName === '' && $subjectCode === '') {
+        return $fallbackLabel;
+    }
+
+    if ($roleCategory === 'Staff') {
+        return $subjectCode !== '' ? $subjectCode : $subjectName;
+    }
+
+    return $subjectName !== '' ? $subjectName : $subjectCode;
+};
+
 foreach ($homeworkRows as $row) {
     $type = trim((string) ($row['markbookType'] ?? ''));
     if ($type === '') {
         $type = __('Homework');
     }
+    $meta = $eventTypeMeta[$type] ?? null;
+    $classification = is_array($meta) ? (string) ($meta['classification'] ?? '') : '';
 
     $homeworkTitle = trim((string) ($row['markbookName'] ?? ''));
     if ($homeworkTitle === '') {
         $homeworkTitle = trim((string) ($row['homeworkName'] ?? __('Homework')));
     }
 
-    $courseShort = trim((string) ($row['courseNameShort'] ?? ''));
-    $classShort = trim((string) ($row['classNameShort'] ?? ''));
-    if ($courseShort !== '' && $classShort !== '') {
-        $subject = $courseShort.'.'.$classShort;
-    } else {
-        $subject = trim($courseShort.$classShort);
-    }
-    if ($subject === '') {
-        $subject = __('Homework');
-    }
+    $subject = $buildSubjectLabel($row, __('Homework'));
 
     $title = $subject;
     if ($homeworkTitle !== '' && mb_strtolower($homeworkTitle) !== mb_strtolower($subject)) {
@@ -130,6 +169,12 @@ foreach ($homeworkRows as $row) {
     }
 
     $color = $customColors[$type] ?? ac_colorFromPalette($type);
+    $classificationClass = 'ac-event-homework-none';
+    if ($classification === 'formative') {
+        $classificationClass = 'ac-event-homework-formative';
+    } elseif ($classification === 'summative') {
+        $classificationClass = 'ac-event-homework-summative';
+    }
 
     $query = [
         'q' => '/modules/Planner/planner_view_full.php',
@@ -151,15 +196,15 @@ foreach ($homeworkRows as $row) {
         'title' => $title,
         'start' => date('c', strtotime((string) $row['homeworkDueDateTime'])),
         'allDay' => false,
-        'classNames' => ['ac-event-homework'],
+        'classNames' => ['ac-event-homework', $classificationClass],
         'url' => $absoluteURL.'/index.php?'.http_build_query($query),
         'backgroundColor' => $color,
-        'borderColor' => $color,
         'extendedProps' => [
             'subject' => $subject,
             'homeworkTitle' => $homeworkTitle,
             'yearGroups' => $yearGroupsText,
             'type' => $type,
+            'classification' => $classification,
             'source' => 'Planner',
         ],
     ];
@@ -170,22 +215,27 @@ foreach ($assessmentRows as $row) {
     if ($type === '') {
         $type = __('Assessment');
     }
+    $meta = $eventTypeMeta[$type] ?? null;
+    if (is_array($meta) && (($meta['visible'] ?? 'Y') === 'N')) {
+        continue;
+    }
+    $classification = is_array($meta) ? (string) ($meta['classification'] ?? '') : '';
+    if ($classification === 'formative' && $assessmentFormative !== 'Y') {
+        continue;
+    }
+    if ($classification === 'summative' && $assessmentSummative !== 'Y') {
+        continue;
+    }
+    if ($classification === '' && $assessmentNone !== 'Y') {
+        continue;
+    }
 
     $assessmentTitle = trim((string) ($row['assessmentName'] ?? ''));
     if ($assessmentTitle === '') {
         $assessmentTitle = __('Assessment');
     }
 
-    $courseShort = trim((string) ($row['courseNameShort'] ?? ''));
-    $classShort = trim((string) ($row['classNameShort'] ?? ''));
-    if ($courseShort !== '' && $classShort !== '') {
-        $subject = $courseShort.'.'.$classShort;
-    } else {
-        $subject = trim($courseShort.$classShort);
-    }
-    if ($subject === '') {
-        $subject = __('Assessment');
-    }
+    $subject = $buildSubjectLabel($row, __('Assessment'));
 
     $title = $subject;
     if ($assessmentTitle !== '' && mb_strtolower($assessmentTitle) !== mb_strtolower($subject)) {
@@ -211,6 +261,13 @@ foreach ($assessmentRows as $row) {
     $color = ac_normalizeHexColor((string) ($row['assessmentColor'] ?? ''));
     if ($color === null) {
         $color = $customColors[$type] ?? ac_colorFromPalette($type);
+    }
+
+    $classificationClass = 'ac-event-assessment-none';
+    if ($classification === 'formative') {
+        $classificationClass = 'ac-event-assessment-formative';
+    } elseif ($classification === 'summative') {
+        $classificationClass = 'ac-event-assessment-summative';
     }
 
     $url = null;
@@ -242,14 +299,14 @@ foreach ($assessmentRows as $row) {
         'title' => $title,
         'start' => date('Y-m-d', strtotime((string) $row['assessmentDate'])),
         'allDay' => true,
-        'classNames' => ['ac-event-assessment'],
+        'classNames' => ['ac-event-assessment', $classificationClass],
         'backgroundColor' => $color,
-        'borderColor' => $color,
         'extendedProps' => [
             'subject' => $subject,
             'homeworkTitle' => $assessmentTitle,
             'yearGroups' => $yearGroupsText,
             'type' => $type,
+            'classification' => $classification,
             'source' => 'Markbook',
             'description' => trim((string) ($row['assessmentDescription'] ?? '')),
         ],
