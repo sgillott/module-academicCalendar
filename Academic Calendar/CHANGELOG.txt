@@ -1,7 +1,23 @@
 CHANGELOG
 =========
 
-v0.3.0 (In Progress)
+v0.4.00 (Unreleased)
+--------------------
+- Added scaffolding for a new `Summative Overview` page (weekly matrix layout).
+- Added weekly summative assessment counts per enabled year group in `Summative Overview`.
+- Added threshold-based highlighting for summative weekly counts (normal / at threshold / exceed).
+- Added Manage Settings controls for default and per-year-group summative weekly thresholds.
+- Added Summative Overview filters (term, year-group subset, and only-weeks-with-activity).
+- Added new module action: `Summative Overview` (staff/admin-facing).
+- Added settings for weekly summative threshold:
+  - `summativeWeeklyThresholdDefault` (fallback, default `3`)
+  - `summativeWeeklyThresholdByYearGroup` (per-year-group JSON map)
+- Renamed display settings labels to be clearer:
+  - Show Weekends on Calendar
+  - Show Homework Events on Calendar
+  - Show Assessment Events on Calendar
+
+v0.3.00 (2026-04-20)
 --------------------
 - Added Markbook assessment events to the Homework Calendar feed (student, parent, staff).
 - Assessment events are rendered as all-day entries in FullCalendar.
@@ -15,7 +31,17 @@ v0.3.0 (In Progress)
 - Added per-user `Not Classified` assessment filter control on the calendar view.
 - Added event-type metadata settings (visibility + assessment classification) in Manage Settings.
 - Cleaned up calendar event CSS to stabilize day-grid layout and prevent right-column overflow.
-- Reverted experimental event-border styling in the calendar grid to keep homework vs assessment rendering clear.
+
+v0.2.0 (2026-04-19)
+--------------------
+- Added Markbook assessment events to the Homework Calendar feed (student, parent, staff).
+- Assessment events are rendered as all-day entries in FullCalendar.
+- Added module settings toggles:
+  - Show Homework Events
+  - Show Assessment Events
+- Added role-aware assessment click-through URLs to Markbook pages where accessible.
+- Updated staff year-group label rendering to prefer short names.
+- Added visual differentiation between homework and assessment events.
 
 v0.1.0 (2026-04-12)
 -------------------

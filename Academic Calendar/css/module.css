@@ -42,6 +42,11 @@
     font-weight: 600;
 }
 
+#academicCalendar .fc .ac-event-homework.fc-daygrid-dot-event .fc-event-title,
+#academicCalendar .fc .ac-event-homework.fc-daygrid-dot-event .fc-event-time {
+    color: #111827 !important;
+}
+
 .acColorSetting {
     display: inline-flex;
     align-items: center;
@@ -197,4 +202,202 @@ input.acEventTypeVisible[type="checkbox"] {
         white-space: normal;
         line-height: 1.35;
     }
+}
+
+.acOverviewTitle {
+    margin: 0 0 10px 0;
+    font-size: 1.7rem;
+    line-height: 1.2;
+}
+
+.acOverviewTermTitle {
+    margin: 18px 0 8px 0;
+    font-size: 1.15rem;
+    line-height: 1.25;
+}
+
+.acOverviewTermTitle span {
+    color: #6b7280;
+    font-weight: 500;
+    font-size: 0.95em;
+}
+
+.acOverviewTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+}
+
+.acOverviewTable th,
+.acOverviewTable td {
+    border: 1px solid #d1d5db;
+    padding: 7px 8px;
+    vertical-align: top;
+}
+
+.acOverviewTable thead th {
+    background: #f3f4f6;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.acOverviewWeekNumber {
+    text-align: center;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.acOverviewThreshold {
+    color: #6b7280;
+    font-size: 0.85em;
+    font-weight: 500;
+}
+
+.acOverviewPlaceholder {
+    color: #9ca3af;
+    text-align: center;
+}
+
+.acOverviewEmptyCell {
+    background: #f3f4f6;
+}
+
+.acOverviewFilters {
+    margin: 0 0 14px 0;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.acOverviewFilterPanel {
+    margin: 0 0 14px 0;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #f9fafb;
+    overflow: hidden;
+}
+
+.acOverviewFilterSummary {
+    position: relative;
+    padding: 10px 36px 10px 12px;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+}
+
+.acOverviewFilterSummary::-webkit-details-marker {
+    display: none;
+}
+
+.acOverviewFilterSummary::after {
+    content: "";
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    margin-top: -6px;
+    border-right: 2px solid #4b5563;
+    border-bottom: 2px solid #4b5563;
+    transform: rotate(45deg);
+    transition: transform 0.15s ease;
+}
+
+.acOverviewFilterPanel[open] .acOverviewFilterSummary::after {
+    margin-top: -2px;
+    transform: rotate(-135deg);
+}
+
+.acOverviewFilterBody {
+    padding: 8px 12px 2px 12px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.acOverviewField {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.acOverviewSelect {
+    min-width: 190px;
+    padding: 7px 9px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.acOverviewSelectMulti {
+    min-width: 180px;
+}
+
+.acOverviewFieldCheckbox {
+    padding-bottom: 7px;
+}
+
+.acOverviewFieldButton {
+    padding-bottom: 4px;
+}
+
+.acOverviewFilterButton {
+    padding: 8px 14px;
+    border: 1px solid #1f2937;
+    border-radius: 6px;
+    background: #1f2937;
+    color: #fff;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.acOverviewFilterButton:hover {
+    background: #111827;
+}
+
+.acOverviewCheckbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 0;
+}
+
+.acOverviewWeekClosure td {
+    background: #dbeafe !important;
+}
+
+.acOverviewSubjectsCell {
+    vertical-align: top;
+    min-width: 120px;
+}
+
+.acOverviewSubjectsOk {
+    background: #ecfeff;
+}
+
+.acOverviewSubjectsAtThreshold {
+    background: #fff7ed;
+}
+
+.acOverviewSubjectsExceed {
+    background: #fef2f2;
+}
+
+.acOverviewSubjectLine {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 3px 6px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.5);
+    line-height: 1.35;
+    margin: 0 0 4px 0;
+}
+
+.acOverviewSubjectLine[title] {
+    cursor: help;
+}
+
+.acOverviewSubjectLine:last-child {
+    margin-bottom: 0;
 }

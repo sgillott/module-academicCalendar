@@ -18,7 +18,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
 } else {
     $isEmbed = (string) ($_GET['embed'] ?? '') === '1';
     if (!$isEmbed) {
-        $page->breadcrumbs->add(__('Homework Calendar'));
+        $page->breadcrumbs->add(__('Homework/Assessment Calendar'));
     } else {
         // fullscreen.php does not include the full index stylesheet stack,
         // so we add the base and module styles when rendering in embed mode.
@@ -419,6 +419,24 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                                     main.style.border = 'none';
                                     main.style.borderWidth = '0';
                                     main.style.boxShadow = 'none';
+                                }
+                            }
+                            if (props.source === 'Planner') {
+                                info.el.style.color = '#111827';
+
+                                const main = info.el.querySelector('.fc-event-main');
+                                if (main) {
+                                    main.style.color = '#111827';
+                                }
+
+                                const title = info.el.querySelector('.fc-event-title');
+                                if (title) {
+                                    title.style.color = '#111827';
+                                }
+
+                                const time = info.el.querySelector('.fc-event-time');
+                                if (time) {
+                                    time.style.color = '#111827';
                                 }
                             }
                             const lines = [];

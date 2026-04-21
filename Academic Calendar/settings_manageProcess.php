@@ -49,6 +49,32 @@ $enabledYearGroups = array_values(array_unique(array_filter(array_map('strval', 
     return ctype_digit($id);
 })));
 $enabledYearGroupIDList = implode(',', $enabledYearGroups);
+$summativeWeeklyThresholdDefault = trim((string) ($_POST['summativeWeeklyThresholdDefault'] ?? '3'));
+if ($summativeWeeklyThresholdDefault === '' || !ctype_digit($summativeWeeklyThresholdDefault) || (int) $summativeWeeklyThresholdDefault < 1) {
+    $summativeWeeklyThresholdDefault = '3';
+}
+$postedThresholdByYearGroup = $_POST['summativeWeeklyThresholdByYearGroup'] ?? [];
+if (!is_array($postedThresholdByYearGroup)) {
+    $postedThresholdByYearGroup = [];
+}
+$summativeWeeklyThresholdByYearGroup = [];
+foreach ($postedThresholdByYearGroup as $yearGroupID => $threshold) {
+    $yearGroupID = trim((string) $yearGroupID);
+    if ($yearGroupID === '' || !ctype_digit($yearGroupID)) {
+        continue;
+    }
+
+    $threshold = trim((string) $threshold);
+    if ($threshold === '') {
+        continue;
+    }
+
+    if (!ctype_digit($threshold) || (int) $threshold < 1) {
+        continue;
+    }
+
+    $summativeWeeklyThresholdByYearGroup[$yearGroupID] = (int) $threshold;
+}
 
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'showWeekends', $showWeekends) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'defaultStaffView', $defaultStaffView) || $partialFail;
@@ -134,10 +160,44 @@ if (empty($yearGroupSetting)) {
     $partialFail = !$insertSuccess || $partialFail;
 }
 
+$defaultThresholdSetting = $settingGateway->getSettingByScope('Academic Calendar', 'summativeWeeklyThresholdDefault', true);
+if (empty($defaultThresholdSetting)) {
+    $insertSuccess = $pdo->statement(
+        "INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+         VALUES (:scope, :name, :nameDisplay, :description, :value)",
+        [
+            'scope' => 'Academic Calendar',
+            'name' => 'summativeWeeklyThresholdDefault',
+            'nameDisplay' => 'Default Summative Weekly Threshold',
+            'description' => 'Fallback threshold used when a year group does not have its own setting.',
+            'value' => '3',
+        ]
+    );
+    $partialFail = !$insertSuccess || $partialFail;
+}
+
+$thresholdByYearGroupSetting = $settingGateway->getSettingByScope('Academic Calendar', 'summativeWeeklyThresholdByYearGroup', true);
+if (empty($thresholdByYearGroupSetting)) {
+    $insertSuccess = $pdo->statement(
+        "INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+         VALUES (:scope, :name, :nameDisplay, :description, :value)",
+        [
+            'scope' => 'Academic Calendar',
+            'name' => 'summativeWeeklyThresholdByYearGroup',
+            'nameDisplay' => 'Summative Weekly Threshold by Year Group',
+            'description' => 'JSON map of gibbonYearGroupID to weekly threshold.',
+            'value' => '{}',
+        ]
+    );
+    $partialFail = !$insertSuccess || $partialFail;
+}
+
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'showHomeworkEvents', $showHomeworkEvents) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'showAssessmentEvents', $showAssessmentEvents) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'defaultAssessmentFilter', json_encode($defaultAssessmentFilter)) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'gibbonYearGroupIDList', $enabledYearGroupIDList) || $partialFail;
+$partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'summativeWeeklyThresholdDefault', $summativeWeeklyThresholdDefault) || $partialFail;
+$partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'summativeWeeklyThresholdByYearGroup', json_encode($summativeWeeklyThresholdByYearGroup)) || $partialFail;
 
 $types = $pdo->select("
     SELECT DISTINCT type

@@ -3,6 +3,7 @@
 use Gibbon\Forms\Form;
 use Gibbon\Forms\DatabaseFormFactory;
 use Gibbon\Domain\System\SettingGateway;
+use Gibbon\Domain\School\YearGroupGateway;
 
 require_once __DIR__.'/moduleFunctions.php';
 
@@ -20,6 +21,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $page->breadcrumbs->add(__('Manage Settings'));
 
     $settingGateway = $container->get(SettingGateway::class);
+    $yearGroupGateway = $container->get(YearGroupGateway::class);
 
     $colors = ac_getColorMap($settingGateway);
     $typeMeta = ac_getEventTypeMeta($settingGateway);
@@ -29,6 +31,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $defaultAssessmentFilter = ac_getDefaultAssessmentFilter($settingGateway);
     $defaultStaffView = (string) $settingGateway->getSettingByScope('Academic Calendar', 'defaultStaffView');
     $enabledYearGroupIDList = (string) ($settingGateway->getSettingByScope('Academic Calendar', 'gibbonYearGroupIDList') ?: '');
+    $defaultSummativeThreshold = ac_getSummativeThresholdDefault($settingGateway);
+    $thresholdByYearGroup = ac_getSummativeThresholdByYearGroup($settingGateway);
 
     $types = $pdo->select("
         SELECT DISTINCT type
@@ -45,15 +49,15 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $row->addHeading(__('Display'));
 
     $row = $form->addRow();
-    $row->addLabel('showWeekends', __('Show Weekends'));
+    $row->addLabel('showWeekends', __('Show Weekends on Calendar'));
     $row->addYesNo('showWeekends')->selected($showWeekends === 'N' ? 'N' : 'Y');
 
     $row = $form->addRow();
-    $row->addLabel('showHomeworkEvents', __('Show Homework Events'));
+    $row->addLabel('showHomeworkEvents', __('Show Homework Events on Calendar'));
     $row->addYesNo('showHomeworkEvents')->selected($showHomeworkEvents === 'N' ? 'N' : 'Y');
 
     $row = $form->addRow();
-    $row->addLabel('showAssessmentEvents', __('Show Assessment Events'));
+    $row->addLabel('showAssessmentEvents', __('Show Assessment Events on Calendar'));
     $row->addYesNo('showAssessmentEvents')->selected($showAssessmentEvents === 'N' ? 'N' : 'Y');
 
     $row = $form->addRow();
@@ -86,6 +90,50 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
             'gibbonYearGroupIDList' => $enabledYearGroupIDList,
         ];
         $row->addCheckboxYearGroup('gibbonYearGroupIDList')->addCheckAllNone()->loadFromCSV($yearGroupValues);
+    }
+
+    $row = $form->addRow();
+    $row->addHeading(__('Summative Assessment Overview'));
+
+    $row = $form->addRow();
+    $row->addLabel('summativeWeeklyThresholdDefault', __('Default Summative Assessment Weekly Threshold'))
+        ->description(__('Fallback threshold used when a year group does not have its own setting.'));
+    $row->addNumber('summativeWeeklyThresholdDefault')
+        ->minimum(1)
+        ->maximum(99)
+        ->required()
+        ->setValue($defaultSummativeThreshold)
+        ->setClass('w-20');
+
+    $criteria = $yearGroupGateway->newQueryCriteria(true)->sortBy(['sequenceNumber']);
+    $allYearGroups = $yearGroupGateway->queryYearGroups($criteria)->toArray();
+    $allYearGroups = ac_normalizeYearGroupRows($allYearGroups);
+    $enabledYearGroupIDs = ac_parseIDList($enabledYearGroupIDList);
+    $overviewYearGroups = ac_filterYearGroupsByEnabled($allYearGroups, $enabledYearGroupIDs);
+
+    if (!empty($overviewYearGroups)) {
+        $row = $form->addRow();
+        $row->addLabel('summativeWeeklyThresholdByYearGroup', __('Threshold by Year Group'))
+            ->description(__('Leave blank to use the default threshold.'));
+
+        $table = $row->addTable('acThresholdTable')->addClass('colorOddEven');
+        $header = $table->addHeaderRow();
+        $header->addContent(__('Year Group'));
+        $header->addContent(__('Weekly Threshold'));
+
+        foreach ($overviewYearGroups as $group) {
+            $yearGroupID = (string) $group['gibbonYearGroupID'];
+            $yearGroupLabel = (string) ($group['nameShort'] ?: $group['name']);
+            $savedThreshold = isset($thresholdByYearGroup[$yearGroupID]) ? (int) $thresholdByYearGroup[$yearGroupID] : '';
+
+            $row = $table->addRow();
+            $row->addContent($yearGroupLabel);
+            $row->addNumber('summativeWeeklyThresholdByYearGroup['.$yearGroupID.']')
+                ->minimum(1)
+                ->maximum(99)
+                ->setClass('w-20')
+                ->setValue($savedThreshold);
+        }
     }
 
     $row = $form->addRow();

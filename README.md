@@ -1,4 +1,4 @@
-﻿# Academic Calendar (Gibbon Module)
+# Academic Calendar (Gibbon Module)
 
 Academic Calendar adds a calendar view to Gibbon for Students, Parents, and Staff, combining Planner homework deadlines and Markbook assessment dates.
 
@@ -35,6 +35,18 @@ It is built for Gibbon `v31.0.00+`, uses FullCalendar, and is based on a module 
 - Role-aware click-through to Planner/Markbook pages based on access
 - Mobile-friendly toolbar behavior
 
+## New in v0.4.00
+
+- New **Summative Overview** page:
+  - Weekly overview grouped by term
+  - Year-group columns with configurable summative thresholds
+  - Subject-grouped weekly totals (duplicate subject entries grouped, eg `Geo x3`)
+  - Tooltip details on hover for grouped subject lines
+  - Full-week school closure highlighting
+- New settings for threshold control:
+  - `summativeWeeklyThresholdDefault`
+  - `summativeWeeklyThresholdByYearGroup`
+
 ## Module Structure
 
 Main files:
@@ -43,6 +55,7 @@ Main files:
 - `CHANGEDB.php` - incremental database setting changes for released versions
 - `calendar_view.php` - primary calendar page
 - `calendar_eventsJSON.php` - JSON event endpoint for FullCalendar
+- `assessment_overview.php` - weekly summative assessment overview
 - `moduleFunctions.php` - shared helpers
 - `settings_manage.php` / `settings_manageProcess.php` - module settings
 - `hook_staffDashboard_homeworkView.php`
@@ -62,12 +75,15 @@ Main files:
 - `eventTypeColors` (JSON map: event type -> hex color)
 - `eventTypeMeta` (JSON map: event type -> `{visible, classification}`)
 - `gibbonYearGroupIDList` (CSV list of enabled year groups)
+- `summativeWeeklyThresholdDefault` (integer fallback threshold)
+- `summativeWeeklyThresholdByYearGroup` (JSON map: `gibbonYearGroupID` -> integer threshold)
 
 ## Permissions and Actions
 
 Actions defined in `manifest.php`:
 
 - `Homework Calendar`
+- `Summative Overview`
 - `Manage Settings`
 - `Homework Calendar_allYearGroups` (hidden action for permission-based staff scope)
 
@@ -89,7 +105,7 @@ Actions defined in `manifest.php`:
 
 ## Version
 
-Current module version: `0.3.00`
+Current module version: `0.4.00`
 
 ## License
 

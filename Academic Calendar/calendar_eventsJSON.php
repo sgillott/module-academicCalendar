@@ -199,6 +199,7 @@ foreach ($homeworkRows as $row) {
         'classNames' => ['ac-event-homework', $classificationClass],
         'url' => $absoluteURL.'/index.php?'.http_build_query($query),
         'backgroundColor' => $color,
+        'textColor' => '#111827',
         'extendedProps' => [
             'subject' => $subject,
             'homeworkTitle' => $homeworkTitle,
@@ -301,6 +302,7 @@ foreach ($assessmentRows as $row) {
         'allDay' => true,
         'classNames' => ['ac-event-assessment', $classificationClass],
         'backgroundColor' => $color,
+        'textColor' => ac_getContrastingTextColor($color),
         'extendedProps' => [
             'subject' => $subject,
             'homeworkTitle' => $assessmentTitle,

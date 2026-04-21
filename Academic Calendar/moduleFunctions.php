@@ -279,6 +279,51 @@ function ac_colorFromPalette(string $key): string
 }
 
 /**
+ * Choose a readable text color for a given background color.
+ *
+ * Uses WCAG relative luminance and contrast ratio checks to decide whether
+ * light or dark text has better contrast on the supplied background.
+ *
+ * @param string $backgroundColor Hex background color (`#RRGGBB`).
+ * @param string $darkTextColor Preferred dark text color.
+ * @param string $lightTextColor Preferred light text color.
+ *
+ * @return string Selected text color.
+ */
+function ac_getContrastingTextColor(
+    string $backgroundColor,
+    string $darkTextColor = '#111827',
+    string $lightTextColor = '#FFFFFF'
+): string {
+    $color = ac_normalizeHexColor($backgroundColor);
+    if ($color === null) {
+        return $darkTextColor;
+    }
+
+    $r = hexdec(substr($color, 1, 2)) / 255;
+    $g = hexdec(substr($color, 3, 2)) / 255;
+    $b = hexdec(substr($color, 5, 2)) / 255;
+
+    $transform = function (float $channel): float {
+        if ($channel <= 0.03928) {
+            return $channel / 12.92;
+        }
+
+        return pow(($channel + 0.055) / 1.055, 2.4);
+    };
+
+    $rLinear = $transform($r);
+    $gLinear = $transform($g);
+    $bLinear = $transform($b);
+
+    $luminance = (0.2126 * $rLinear) + (0.7152 * $gLinear) + (0.0722 * $bLinear);
+    $contrastWithWhite = 1.05 / ($luminance + 0.05);
+    $contrastWithBlack = ($luminance + 0.05) / 0.05;
+
+    return $contrastWithWhite >= $contrastWithBlack ? $lightTextColor : $darkTextColor;
+}
+
+/**
  * Check whether weekends should be shown in FullCalendar.
  *
  * @param SettingGateway $settingGateway Core setting gateway service.
@@ -374,6 +419,78 @@ function ac_getEnabledYearGroupIDs(SettingGateway $settingGateway): array
     $value = $settingGateway->getSettingByScope('Academic Calendar', 'gibbonYearGroupIDList');
 
     return ac_parseIDList(is_string($value) ? $value : '');
+}
+
+/**
+ * Get default weekly summative threshold.
+ *
+ * Falls back to 3 if setting is missing or invalid.
+ *
+ * @param SettingGateway $settingGateway Core setting gateway service.
+ *
+ * @return int Positive default threshold.
+ */
+function ac_getSummativeThresholdDefault(SettingGateway $settingGateway): int
+{
+    $raw = trim((string) $settingGateway->getSettingByScope('Academic Calendar', 'summativeWeeklyThresholdDefault'));
+    if ($raw === '' || !ctype_digit($raw)) {
+        return 3;
+    }
+
+    $value = (int) $raw;
+
+    return $value > 0 ? $value : 3;
+}
+
+/**
+ * Decode per-year-group weekly summative threshold map.
+ *
+ * Expected JSON format:
+ * `{ "001": 3, "002": 4 }`
+ *
+ * @param SettingGateway $settingGateway Core setting gateway service.
+ *
+ * @return array<string, int> Map of year-group ID => threshold.
+ */
+function ac_getSummativeThresholdByYearGroup(SettingGateway $settingGateway): array
+{
+    $raw = (string) $settingGateway->getSettingByScope('Academic Calendar', 'summativeWeeklyThresholdByYearGroup');
+    if ($raw === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+
+    $clean = [];
+    foreach ($decoded as $yearGroupID => $threshold) {
+        $id = trim((string) $yearGroupID);
+        if ($id === '' || !ctype_digit($id)) {
+            continue;
+        }
+
+        if (is_string($threshold)) {
+            $threshold = trim($threshold);
+            if ($threshold === '' || !ctype_digit($threshold)) {
+                continue;
+            }
+            $threshold = (int) $threshold;
+        } elseif (is_int($threshold)) {
+            $threshold = (int) $threshold;
+        } elseif (is_float($threshold)) {
+            $threshold = (int) round($threshold);
+        } else {
+            continue;
+        }
+
+        if ($threshold > 0) {
+            $clean[$id] = $threshold;
+        }
+    }
+
+    return $clean;
 }
 
 /**
