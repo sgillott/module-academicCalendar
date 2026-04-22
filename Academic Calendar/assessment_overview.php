@@ -4,6 +4,7 @@ use Gibbon\Domain\School\SchoolYearGateway;
 use Gibbon\Domain\School\SchoolYearSpecialDayGateway;
 use Gibbon\Domain\School\SchoolYearTermGateway;
 use Gibbon\Domain\School\YearGroupGateway;
+use Gibbon\Domain\Students\StudentGateway;
 use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Module\AcademicCalendar\Domain\AcademicCalendarEventGateway;
 
@@ -23,11 +24,13 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
     $schoolYearTermGateway = $container->get(SchoolYearTermGateway::class);
     $specialDayGateway = $container->get(SchoolYearSpecialDayGateway::class);
     $yearGroupGateway = $container->get(YearGroupGateway::class);
+    $studentGateway = $container->get(StudentGateway::class);
     $eventGateway = $container->get(AcademicCalendarEventGateway::class);
 
     $enabledYearGroupIDs = ac_getEnabledYearGroupIDs($settingGateway);
     $defaultThreshold = ac_getSummativeThresholdDefault($settingGateway);
     $thresholdByYearGroup = ac_getSummativeThresholdByYearGroup($settingGateway);
+    $overviewWeekNumberMode = ac_getOverviewWeekNumberMode($settingGateway);
     $eventTypeMeta = ac_getEventTypeMeta($settingGateway);
     $eventTypeColors = ac_getColorMap($settingGateway);
 
@@ -42,8 +45,46 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
     $yearGroups = ac_normalizeYearGroupRows($yearGroups);
     $yearGroups = ac_filterYearGroupsByEnabled($yearGroups, $enabledYearGroupIDs);
 
+    $roleCategory = (string) $session->get('gibbonRoleIDCurrentCategory');
+    $restrictedYearGroupIDs = [];
+
+    if ($roleCategory === 'Student') {
+        $student = $studentGateway
+            ->selectActiveStudentByPerson($gibbonSchoolYearID, (string) $session->get('gibbonPersonID'))
+            ->fetch();
+
+        $studentYearGroupID = (string) ($student['gibbonYearGroupID'] ?? '');
+        if ($studentYearGroupID !== '') {
+            $restrictedYearGroupIDs[] = $studentYearGroupID;
+        }
+    } elseif ($roleCategory === 'Parent') {
+        $children = $studentGateway
+            ->selectActiveStudentsByFamilyAdult($gibbonSchoolYearID, (string) $session->get('gibbonPersonID'))
+            ->fetchAll();
+
+        if (is_array($children)) {
+            foreach ($children as $child) {
+                $childYearGroupID = (string) ($child['gibbonYearGroupID'] ?? '');
+                if ($childYearGroupID !== '') {
+                    $restrictedYearGroupIDs[] = $childYearGroupID;
+                }
+            }
+        }
+    }
+
+    if ($roleCategory === 'Student' || $roleCategory === 'Parent') {
+        $yearGroups = ac_filterYearGroupsByEnabled(
+            $yearGroups,
+            array_values(array_unique($restrictedYearGroupIDs))
+        );
+    }
+
     if (empty($yearGroups)) {
-        $page->addWarning(__('No enabled year groups are available in Academic Calendar settings.'));
+        if ($roleCategory === 'Student' || $roleCategory === 'Parent') {
+            $page->addWarning(__('No enabled year groups are available for your account.'));
+        } else {
+            $page->addWarning(__('No enabled year groups are available in Academic Calendar settings.'));
+        }
         return;
     }
 
@@ -137,6 +178,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
     $dayOfWeek = (int) $schoolYearStart->format('w');
     $daysBack = ($dayOfWeek - $weekStartsOn + 7) % 7;
     $cursor = $schoolYearStart->modify('-'.$daysBack.' days');
+    $academicWeekCounter = 0;
 
     $weeklyCounts = [];
     $weeklySubjects = [];
@@ -291,13 +333,19 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
         }
 
         $weekRow = [
-            'weekNumber' => (int) $weekStart->format('W'),
+            'calendarWeekNumber' => (int) $weekStart->format('W'),
+            'academicWeekNumber' => null,
             'weekStart' => $weekStart,
             'weekEnd' => $weekEnd,
             'weekKey' => $weekKey,
             'specialDays' => array_values($weekSpecialDays),
             'containsSchoolClosure' => $containsSchoolClosure,
         ];
+
+        if (!$containsSchoolClosure) {
+            $academicWeekCounter++;
+            $weekRow['academicWeekNumber'] = $academicWeekCounter;
+        }
 
         if (!empty($matchedTerm['id'])) {
             $weeksByTerm[$matchedTerm['id']][] = $weekRow;
@@ -369,7 +417,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
         echo '</div>';
     }
 
-    $renderTermTable = function (string $heading, string $dateRange, array $weeks) use ($displayYearGroups, $thresholdByYearGroup, $defaultThreshold, $weeklyCounts, $weeklySubjects, $weeklySubjectDetails, $weeklySubjectColors) {
+    $renderTermTable = function (string $heading, string $dateRange, array $weeks) use ($displayYearGroups, $thresholdByYearGroup, $defaultThreshold, $weeklyCounts, $weeklySubjects, $weeklySubjectDetails, $weeklySubjectColors, $overviewWeekNumberMode) {
         if (empty($weeks)) {
             return;
         }
@@ -393,9 +441,12 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
         foreach ($weeks as $week) {
             $weekKey = (string) $week['weekKey'];
             $rowClass = !empty($week['containsSchoolClosure']) ? ' class="acOverviewWeekClosure"' : '';
+            $weekNumberDisplay = $overviewWeekNumberMode === 'academic'
+                ? ($week['academicWeekNumber'] !== null ? (string) $week['academicWeekNumber'] : '&ndash;')
+                : (string) (int) $week['calendarWeekNumber'];
 
             echo '<tr'.$rowClass.'>';
-            echo '<td class="acOverviewWeekNumber">'.(int) $week['weekNumber'].'</td>';
+            echo '<td class="acOverviewWeekNumber">'.$weekNumberDisplay.'</td>';
             echo '<td>'.htmlspecialchars($week['weekStart']->format('j M')).'</td>';
 
             foreach ($displayYearGroups as $group) {

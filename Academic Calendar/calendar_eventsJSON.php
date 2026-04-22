@@ -43,6 +43,7 @@ $yearGroupGateway = $container->get(YearGroupGateway::class);
 $customColors = ac_getColorMap($settingGateway);
 $eventTypeMeta = ac_getEventTypeMeta($settingGateway);
 $defaultAssessmentFilter = ac_getDefaultAssessmentFilter($settingGateway);
+$staffEventFormat = ac_getStaffEventFormat($settingGateway);
 $enabledYearGroupIDs = ac_getEnabledYearGroupIDs($settingGateway);
 $showHomeworkEvents = ac_getShowHomeworkEvents($settingGateway);
 $showAssessmentEvents = ac_getShowAssessmentEvents($settingGateway);
@@ -132,6 +133,30 @@ $buildSubjectLabel = function (array $row, string $fallbackLabel) use ($buildSub
     return $subjectName !== '' ? $subjectName : $subjectCode;
 };
 
+$buildStaffTitle = function (array $row, string $itemTitle, string $yearGroupsText) use ($buildSubjectParts, $staffEventFormat) {
+    [$subjectName, $subjectCode] = $buildSubjectParts($row);
+
+    if ($staffEventFormat === 'subjectCodeTitle') {
+        $prefix = $subjectName !== '' ? $subjectName : $subjectCode;
+        if ($subjectCode !== '' && $subjectName !== '' && $subjectCode !== $subjectName) {
+            $prefix .= ' ('.$subjectCode.')';
+        }
+
+        return $itemTitle !== '' && mb_strtolower($itemTitle) !== mb_strtolower($prefix)
+            ? $prefix.' - '.$itemTitle
+            : $prefix;
+    }
+
+    $prefix = $subjectCode !== '' ? $subjectCode : $subjectName;
+    if ($staffEventFormat === 'yearGroupCodeTitle' && $yearGroupsText !== '') {
+        $prefix = '('.$yearGroupsText.') '.$prefix;
+    }
+
+    return $itemTitle !== '' && mb_strtolower($itemTitle) !== mb_strtolower($prefix)
+        ? $prefix.' - '.$itemTitle
+        : $prefix;
+};
+
 foreach ($homeworkRows as $row) {
     $type = trim((string) ($row['markbookType'] ?? ''));
     if ($type === '') {
@@ -147,11 +172,6 @@ foreach ($homeworkRows as $row) {
 
     $subject = $buildSubjectLabel($row, __('Homework'));
 
-    $title = $subject;
-    if ($homeworkTitle !== '' && mb_strtolower($homeworkTitle) !== mb_strtolower($subject)) {
-        $title .= ' - '.$homeworkTitle;
-    }
-
     $yearGroupsText = '';
     if ($roleCategory === 'Staff') {
         $prefixes = [];
@@ -164,8 +184,14 @@ foreach ($homeworkRows as $row) {
 
         if (!empty($prefixes)) {
             $yearGroupsText = implode('/', $prefixes);
-            $title = '('.$yearGroupsText.') '.$title;
         }
+    }
+
+    $title = $roleCategory === 'Staff'
+        ? $buildStaffTitle($row, $homeworkTitle, $yearGroupsText)
+        : $subject;
+    if ($roleCategory !== 'Staff' && $homeworkTitle !== '' && mb_strtolower($homeworkTitle) !== mb_strtolower($subject)) {
+        $title .= ' - '.$homeworkTitle;
     }
 
     $color = $customColors[$type] ?? ac_colorFromPalette($type);
@@ -238,11 +264,6 @@ foreach ($assessmentRows as $row) {
 
     $subject = $buildSubjectLabel($row, __('Assessment'));
 
-    $title = $subject;
-    if ($assessmentTitle !== '' && mb_strtolower($assessmentTitle) !== mb_strtolower($subject)) {
-        $title .= ' - '.$assessmentTitle;
-    }
-
     $yearGroupsText = '';
     if ($roleCategory === 'Staff') {
         $prefixes = [];
@@ -255,8 +276,14 @@ foreach ($assessmentRows as $row) {
 
         if (!empty($prefixes)) {
             $yearGroupsText = implode('/', $prefixes);
-            $title = '('.$yearGroupsText.') '.$title;
         }
+    }
+
+    $title = $roleCategory === 'Staff'
+        ? $buildStaffTitle($row, $assessmentTitle, $yearGroupsText)
+        : $subject;
+    if ($roleCategory !== 'Staff' && $assessmentTitle !== '' && mb_strtolower($assessmentTitle) !== mb_strtolower($subject)) {
+        $title .= ' - '.$assessmentTitle;
     }
 
     $color = ac_normalizeHexColor((string) ($row['assessmentColor'] ?? ''));

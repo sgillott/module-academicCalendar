@@ -64,3 +64,109 @@ WHERE NOT EXISTS (
     SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='summativeWeeklyThresholdByYearGroup'
 );end
 ";
+
+// v0.5.00
+$count++;
+$sql[$count][0] = "0.5.00";
+
+$staffHookOptions = serialize([
+    'sourceModuleName' => 'Academic Calendar',
+    'sourceModuleAction' => 'Homework/Assessment Calendar',
+    'sourceModuleInclude' => 'hook_staffDashboard_homeworkView.php',
+]);
+
+$studentHookOptions = serialize([
+    'sourceModuleName' => 'Academic Calendar',
+    'sourceModuleAction' => 'Homework/Assessment Calendar',
+    'sourceModuleInclude' => 'hook_studentDashboard_homeworkView.php',
+]);
+
+$parentHookOptions = serialize([
+    'sourceModuleName' => 'Academic Calendar',
+    'sourceModuleAction' => 'Homework/Assessment Calendar',
+    'sourceModuleInclude' => 'hook_parentalDashboard_homeworkView.php',
+]);
+
+$staffHookOptions = addslashes($staffHookOptions);
+$studentHookOptions = addslashes($studentHookOptions);
+$parentHookOptions = addslashes($parentHookOptions);
+
+$sql[$count][1] = "
+UPDATE gibbonAction
+SET name='Homework/Assessment Calendar'
+WHERE gibbonModuleID=(SELECT gibbonModuleID FROM gibbonModule WHERE name='Academic Calendar')
+AND name='Homework Calendar';end
+UPDATE gibbonHook
+SET
+    name='Homework',
+    options='{$staffHookOptions}'
+WHERE gibbonModuleID=(SELECT gibbonModuleID FROM gibbonModule WHERE name='Academic Calendar')
+AND type='Staff Dashboard'
+AND options LIKE '%hook_staffDashboard_homeworkView.php%';end
+UPDATE gibbonHook
+SET
+    name='Homework',
+    options='{$studentHookOptions}'
+WHERE gibbonModuleID=(SELECT gibbonModuleID FROM gibbonModule WHERE name='Academic Calendar')
+AND type='Student Dashboard'
+AND options LIKE '%hook_studentDashboard_homeworkView.php%';end
+UPDATE gibbonHook
+SET
+    name='Homework',
+    options='{$parentHookOptions}'
+WHERE gibbonModuleID=(SELECT gibbonModuleID FROM gibbonModule WHERE name='Academic Calendar')
+AND type='Parental Dashboard'
+AND options LIKE '%hook_parentalDashboard_homeworkView.php%';end
+";
+
+// v0.5.01
+$count++;
+$sql[$count][0] = "0.5.01";
+$sql[$count][1] = "
+UPDATE gibbonHook
+SET name='Homework'
+WHERE gibbonModuleID=(SELECT gibbonModuleID FROM gibbonModule WHERE name='Academic Calendar')
+AND type='Staff Dashboard'
+AND options LIKE '%hook_staffDashboard_homeworkView.php%';end
+UPDATE gibbonHook
+SET name='Homework'
+WHERE gibbonModuleID=(SELECT gibbonModuleID FROM gibbonModule WHERE name='Academic Calendar')
+AND type='Student Dashboard'
+AND options LIKE '%hook_studentDashboard_homeworkView.php%';end
+UPDATE gibbonHook
+SET name='Homework'
+WHERE gibbonModuleID=(SELECT gibbonModuleID FROM gibbonModule WHERE name='Academic Calendar')
+AND type='Parental Dashboard'
+AND options LIKE '%hook_parentalDashboard_homeworkView.php%';end
+";
+
+// v0.5.02
+$count++;
+$sql[$count][0] = "0.5.02";
+$sql[$count][1] = "
+INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+SELECT 'Academic Calendar', 'staffEventFormat', 'Staff Event Format', 'Choose how staff homework and assessment labels are shown in the calendar.', 'codeTitle'
+WHERE NOT EXISTS (
+    SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='staffEventFormat'
+);end
+";
+
+// v0.5.03
+$count++;
+$sql[$count][0] = "0.5.03";
+$sql[$count][1] = "
+INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+SELECT 'Academic Calendar', 'overviewWeekNumberMode', 'Overview Week Number Mode', 'Choose whether the summative overview shows calendar weeks or academic weeks.', 'academic'
+WHERE NOT EXISTS (
+    SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='overviewWeekNumberMode'
+);end
+";
+
+// v0.5.04
+$count++;
+$sql[$count][0] = "0.5.04";
+$sql[$count][1] = "
+UPDATE gibbonSetting
+SET value='academic'
+WHERE scope='Academic Calendar' AND name='overviewWeekNumberMode' AND (value='' OR value IS NULL OR value='calendar');end
+";

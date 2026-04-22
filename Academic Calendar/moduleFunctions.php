@@ -201,6 +201,44 @@ function ac_getDefaultAssessmentFilter(SettingGateway $settingGateway): array
 }
 
 /**
+ * Normalize the staff calendar event label format setting.
+ *
+ * Supported values:
+ * - `codeTitle`: class code and homework title
+ * - `yearGroupCodeTitle`: year group, class code, and homework title
+ * - `subjectCodeTitle`: subject name, class code, and homework title
+ *
+ * @param string|null $value Raw setting value.
+ *
+ * @return string Normalized format key.
+ */
+function ac_normalizeStaffEventFormat(?string $value): string
+{
+    $value = trim((string) $value);
+    $allowed = [
+        'codeTitle',
+        'yearGroupCodeTitle',
+        'subjectCodeTitle',
+    ];
+
+    return in_array($value, $allowed, true) ? $value : 'codeTitle';
+}
+
+/**
+ * Retrieve the configured staff homework event label format.
+ *
+ * @param SettingGateway $settingGateway Core setting gateway service.
+ *
+ * @return string Normalized format key.
+ */
+function ac_getStaffEventFormat(SettingGateway $settingGateway): string
+{
+    $value = $settingGateway->getSettingByScope('Academic Calendar', 'staffEventFormat');
+
+    return ac_normalizeStaffEventFormat($value ?: '');
+}
+
+/**
  * Determine if any event types are classified as formative or summative.
  *
  * @param array<string, array{visible:string,classification:string}> $meta
@@ -494,6 +532,38 @@ function ac_getSummativeThresholdByYearGroup(SettingGateway $settingGateway): ar
 }
 
 /**
+ * Normalize the overview week-number mode setting.
+ *
+ * Supported values:
+ * - `calendar`: ISO/calendar week number
+ * - `academic`: week count from the first academic week, excluding full closure weeks
+ *
+ * @param string|null $value Raw setting value.
+ *
+ * @return string Normalized mode key.
+ */
+function ac_normalizeOverviewWeekNumberMode(?string $value): string
+{
+    $value = trim((string) $value);
+
+    return in_array($value, ['calendar', 'academic'], true) ? $value : 'academic';
+}
+
+/**
+ * Retrieve the configured week-number mode for the summative overview.
+ *
+ * @param SettingGateway $settingGateway Core setting gateway service.
+ *
+ * @return string Normalized mode key.
+ */
+function ac_getOverviewWeekNumberMode(SettingGateway $settingGateway): string
+{
+    $value = $settingGateway->getSettingByScope('Academic Calendar', 'overviewWeekNumberMode');
+
+    return ac_normalizeOverviewWeekNumberMode($value ?: '');
+}
+
+/**
  * Get enabled year-group IDs using a raw PDO connection.
  *
  * Used by hook includes where service-container context may not be available.
@@ -714,4 +784,139 @@ function ac_isPersonInEnabledYearGroups(\PDO $pdo, string $gibbonSchoolYearID, s
     $count = $stmt->fetchColumn();
 
     return (int) $count > 0;
+}
+
+/**
+ * Export all module settings rows for Academic Calendar.
+ *
+ * The export structure is intentionally simple JSON so it can be used for
+ * backup/restore across uninstall and reinstall cycles, as well as for
+ * sharing configuration snapshots during debugging.
+ *
+ * @param \PDO $pdo Legacy core PDO connection.
+ *
+ * @return array<string, mixed> Backup payload.
+ */
+function ac_buildSettingsBackup(\PDO $pdo): array
+{
+    $sql = "
+        SELECT scope, name, nameDisplay, description, value
+        FROM gibbonSetting
+        WHERE scope = :scope
+        ORDER BY name
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute(['scope' => 'Academic Calendar']);
+    $settings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+    return [
+        'module' => 'Academic Calendar',
+        'exportedAt' => gmdate('c'),
+        'formatVersion' => '1',
+        'settings' => is_array($settings) ? $settings : [],
+    ];
+}
+
+/**
+ * Validate and normalize a settings backup payload.
+ *
+ * @param mixed $payload Decoded JSON payload.
+ *
+ * @return array<int, array{scope:string,name:string,nameDisplay:string,description:string,value:string}>|null
+ */
+function ac_validateSettingsBackup($payload): ?array
+{
+    if (!is_array($payload)) {
+        return null;
+    }
+
+    if (($payload['module'] ?? '') !== 'Academic Calendar') {
+        return null;
+    }
+
+    $settings = $payload['settings'] ?? null;
+    if (!is_array($settings)) {
+        return null;
+    }
+
+    $clean = [];
+
+    foreach ($settings as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+
+        $scope = trim((string) ($row['scope'] ?? ''));
+        $name = trim((string) ($row['name'] ?? ''));
+        $nameDisplay = trim((string) ($row['nameDisplay'] ?? ''));
+        $description = trim((string) ($row['description'] ?? ''));
+        $value = (string) ($row['value'] ?? '');
+
+        if ($scope !== 'Academic Calendar' || $name === '') {
+            continue;
+        }
+
+        $clean[] = [
+            'scope' => $scope,
+            'name' => $name,
+            'nameDisplay' => $nameDisplay,
+            'description' => $description,
+            'value' => $value,
+        ];
+    }
+
+    return !empty($clean) ? $clean : null;
+}
+
+/**
+ * Insert or update one Academic Calendar setting row.
+ *
+ * @param \PDO $pdo Legacy core PDO connection.
+ * @param array{scope:string,name:string,nameDisplay:string,description:string,value:string} $setting
+ *
+ * @return bool
+ */
+function ac_upsertSettingRow(\PDO $pdo, array $setting): bool
+{
+    $check = $pdo->prepare("
+        SELECT gibbonSettingID
+        FROM gibbonSetting
+        WHERE scope = :scope AND name = :name
+    ");
+    $check->execute([
+        'scope' => $setting['scope'],
+        'name' => $setting['name'],
+    ]);
+    $existingID = $check->fetchColumn();
+
+    if ($existingID !== false) {
+        $update = $pdo->prepare("
+            UPDATE gibbonSetting
+            SET nameDisplay = :nameDisplay,
+                description = :description,
+                value = :value
+            WHERE gibbonSettingID = :gibbonSettingID
+        ");
+
+        return $update->execute([
+            'nameDisplay' => $setting['nameDisplay'],
+            'description' => $setting['description'],
+            'value' => $setting['value'],
+            'gibbonSettingID' => $existingID,
+        ]);
+    }
+
+    $insert = $pdo->prepare("
+        INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+        VALUES (:scope, :name, :nameDisplay, :description, :value)
+    ");
+
+    return $insert->execute([
+        'scope' => $setting['scope'],
+        'name' => $setting['name'],
+        'nameDisplay' => $setting['nameDisplay'],
+        'description' => $setting['description'],
+        'value' => $setting['value'],
+    ]);
 }

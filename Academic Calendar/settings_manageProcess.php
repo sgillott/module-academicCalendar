@@ -32,6 +32,7 @@ $showAssessmentEvents = $showAssessmentEvents === 'N' ? 'N' : 'Y';
 
 $defaultStaffView = (string) ($_POST['defaultStaffView'] ?? 'all');
 $defaultStaffView = $defaultStaffView === 'yearGroup' ? 'yearGroup' : 'all';
+$staffEventFormat = ac_normalizeStaffEventFormat((string) ($_POST['staffEventFormat'] ?? 'codeTitle'));
 $defaultAssessmentFilterPosted = $_POST['defaultAssessmentFilter'] ?? [];
 if (!is_array($defaultAssessmentFilterPosted)) {
     $defaultAssessmentFilterPosted = [];
@@ -53,6 +54,7 @@ $summativeWeeklyThresholdDefault = trim((string) ($_POST['summativeWeeklyThresho
 if ($summativeWeeklyThresholdDefault === '' || !ctype_digit($summativeWeeklyThresholdDefault) || (int) $summativeWeeklyThresholdDefault < 1) {
     $summativeWeeklyThresholdDefault = '3';
 }
+$overviewWeekNumberMode = ac_normalizeOverviewWeekNumberMode((string) ($_POST['overviewWeekNumberMode'] ?? 'academic'));
 $postedThresholdByYearGroup = $_POST['summativeWeeklyThresholdByYearGroup'] ?? [];
 if (!is_array($postedThresholdByYearGroup)) {
     $postedThresholdByYearGroup = [];
@@ -79,7 +81,23 @@ foreach ($postedThresholdByYearGroup as $yearGroupID => $threshold) {
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'showWeekends', $showWeekends) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'defaultStaffView', $defaultStaffView) || $partialFail;
 
-// Backward compatibility: ensure new setting exists for already-installed modules.
+$staffEventFormatSetting = $settingGateway->getSettingByScope('Academic Calendar', 'staffEventFormat', true);
+if (empty($staffEventFormatSetting)) {
+    $insertSuccess = $pdo->statement(
+        "INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+         VALUES (:scope, :name, :nameDisplay, :description, :value)",
+        [
+            'scope' => 'Academic Calendar',
+            'name' => 'staffEventFormat',
+            'nameDisplay' => 'Staff Event Format',
+            'description' => 'Choose how staff homework and assessment labels are shown in the calendar.',
+            'value' => 'codeTitle',
+        ]
+    );
+    $partialFail = !$insertSuccess || $partialFail;
+}
+
+// Backward compatibility: ensure settings added in later versions exist on already-installed modules.
 $homeworkSetting = $settingGateway->getSettingByScope('Academic Calendar', 'showHomeworkEvents', true);
 if (empty($homeworkSetting)) {
     $insertSuccess = $pdo->statement(
@@ -88,7 +106,7 @@ if (empty($homeworkSetting)) {
         [
             'scope' => 'Academic Calendar',
             'name' => 'showHomeworkEvents',
-            'nameDisplay' => 'Show Homework Events',
+            'nameDisplay' => 'Show Homework Events on Calendar',
             'description' => 'Show homework events in the Homework Calendar.',
             'value' => 'Y',
         ]
@@ -104,7 +122,7 @@ if (empty($assessmentSetting)) {
         [
             'scope' => 'Academic Calendar',
             'name' => 'showAssessmentEvents',
-            'nameDisplay' => 'Show Assessment Events',
+            'nameDisplay' => 'Show Assessment Events on Calendar',
             'description' => 'Show markbook assessment events in the Homework Calendar.',
             'value' => 'Y',
         ]
@@ -192,12 +210,30 @@ if (empty($thresholdByYearGroupSetting)) {
     $partialFail = !$insertSuccess || $partialFail;
 }
 
+$overviewWeekNumberModeSetting = $settingGateway->getSettingByScope('Academic Calendar', 'overviewWeekNumberMode', true);
+if (empty($overviewWeekNumberModeSetting)) {
+    $insertSuccess = $pdo->statement(
+        "INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+         VALUES (:scope, :name, :nameDisplay, :description, :value)",
+        [
+            'scope' => 'Academic Calendar',
+            'name' => 'overviewWeekNumberMode',
+            'nameDisplay' => 'Overview Week Number Mode',
+            'description' => 'Choose whether the summative overview shows calendar weeks or academic weeks.',
+            'value' => 'academic',
+        ]
+    );
+    $partialFail = !$insertSuccess || $partialFail;
+}
+
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'showHomeworkEvents', $showHomeworkEvents) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'showAssessmentEvents', $showAssessmentEvents) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'defaultAssessmentFilter', json_encode($defaultAssessmentFilter)) || $partialFail;
+$partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'staffEventFormat', $staffEventFormat) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'gibbonYearGroupIDList', $enabledYearGroupIDList) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'summativeWeeklyThresholdDefault', $summativeWeeklyThresholdDefault) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'summativeWeeklyThresholdByYearGroup', json_encode($summativeWeeklyThresholdByYearGroup)) || $partialFail;
+$partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'overviewWeekNumberMode', $overviewWeekNumberMode) || $partialFail;
 
 $types = $pdo->select("
     SELECT DISTINCT type

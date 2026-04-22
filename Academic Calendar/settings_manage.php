@@ -11,9 +11,11 @@ require_once __DIR__.'/moduleFunctions.php';
  * Manage Settings page.
  *
  * Builds the module settings form, including:
- * - display settings
  * - enabled year groups
- * - per-event-type color mapping.
+ * - calendar display options
+ * - summative overview thresholds
+ * - per-event-type display metadata
+ * - permissions shortcut.
  */
 if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/settings_manage.php')) {
     $page->addError(__('You do not have access to this action.'));
@@ -30,9 +32,19 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $showAssessmentEvents = (string) $settingGateway->getSettingByScope('Academic Calendar', 'showAssessmentEvents');
     $defaultAssessmentFilter = ac_getDefaultAssessmentFilter($settingGateway);
     $defaultStaffView = (string) $settingGateway->getSettingByScope('Academic Calendar', 'defaultStaffView');
+    $staffEventFormat = ac_getStaffEventFormat($settingGateway);
     $enabledYearGroupIDList = (string) ($settingGateway->getSettingByScope('Academic Calendar', 'gibbonYearGroupIDList') ?: '');
     $defaultSummativeThreshold = ac_getSummativeThresholdDefault($settingGateway);
     $thresholdByYearGroup = ac_getSummativeThresholdByYearGroup($settingGateway);
+    $overviewWeekNumberMode = ac_getOverviewWeekNumberMode($settingGateway);
+    $isAdminRole = (string) $session->get('gibbonRoleIDCurrent') === '001';
+    $moduleID = $pdo->select("
+        SELECT gibbonModuleID
+        FROM gibbonModule
+        WHERE name = 'Academic Calendar'
+    ")->fetchColumn();
+    $permissionsURL = $session->get('absoluteURL').'/index.php?q=%2Fmodules%2FUser+Admin%2Fpermission_manage.php&gibbonModuleID='
+        .urlencode((string) $moduleID).'&gibbonRoleID=&Go=Go';
 
     $types = $pdo->select("
         SELECT DISTINCT type
@@ -46,7 +58,21 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $form->addHiddenValue('address', $session->get('address'));
 
     $row = $form->addRow();
-    $row->addHeading(__('Display'));
+    $row->addHeading(__('Year Groups'));
+
+    $row = $form->addRow();
+    $row->addLabel('gibbonYearGroupIDList', __('Year Groups'))->description(__('Academic Calendar is enabled for these year groups.'));
+    if (trim($enabledYearGroupIDList) === '') {
+        $row->addCheckboxYearGroup('gibbonYearGroupIDList')->addCheckAllNone()->checkAll();
+    } else {
+        $yearGroupValues = [
+            'gibbonYearGroupIDList' => $enabledYearGroupIDList,
+        ];
+        $row->addCheckboxYearGroup('gibbonYearGroupIDList')->addCheckAllNone()->loadFromCSV($yearGroupValues);
+    }
+
+    $row = $form->addRow();
+    $row->addHeading(__('Calendar Display'));
 
     $row = $form->addRow();
     $row->addLabel('showWeekends', __('Show Weekends on Calendar'));
@@ -60,7 +86,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $row->addLabel('showAssessmentEvents', __('Show Assessment Events on Calendar'));
     $row->addYesNo('showAssessmentEvents')->selected($showAssessmentEvents === 'N' ? 'N' : 'Y');
 
+    $form->toggleVisibilityByClass('acAssessmentSettings')->onClick('showAssessmentEvents')->when('Y');
     $row = $form->addRow();
+    $row->addClass('acAssessmentSettings');
     $row->addLabel('defaultAssessmentFilter', __('Default Assessment Filter'))
         ->description(__('Default user filter for formative and summative assessment events.'));
     $row->addCheckbox('defaultAssessmentFilter')
@@ -75,25 +103,32 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
         ->addCheckAllNone();
 
     $row = $form->addRow();
-    $row->addLabel('defaultStaffView', __('Default Staff View'));
+    $row->addLabel('defaultStaffView', __('Default Staff View'))
+        ->description(__('Choose whether staff start with events from all available year groups or one year group at a time.'));
     $row->addSelect('defaultStaffView')->fromArray([
         'all' => __('All Homework'),
         'yearGroup' => __('Filter by Year Group'),
     ])->selected($defaultStaffView === 'yearGroup' ? 'yearGroup' : 'all');
 
     $row = $form->addRow();
-    $row->addLabel('gibbonYearGroupIDList', __('Year Groups'))->description(__('Academic Calendar is enabled for these year groups.'));
-    if (trim($enabledYearGroupIDList) === '') {
-        $row->addCheckboxYearGroup('gibbonYearGroupIDList')->addCheckAllNone()->checkAll();
-    } else {
-        $yearGroupValues = [
-            'gibbonYearGroupIDList' => $enabledYearGroupIDList,
-        ];
-        $row->addCheckboxYearGroup('gibbonYearGroupIDList')->addCheckAllNone()->loadFromCSV($yearGroupValues);
-    }
+    $row->addLabel('staffEventFormat', __('Staff Event Format'))
+        ->description(__('Choose how staff homework and assessment labels are shown in the calendar.'));
+    $row->addSelect('staffEventFormat')->fromArray([
+        'codeTitle' => __('Class Code - Title'),
+        'yearGroupCodeTitle' => __('Year Group + Class Code - Title'),
+        'subjectCodeTitle' => __('Subject (Class Code) - Title'),
+    ])->selected($staffEventFormat);
 
     $row = $form->addRow();
     $row->addHeading(__('Summative Assessment Overview'));
+
+    $row = $form->addRow();
+    $row->addLabel('overviewWeekNumberMode', __('Overview Week Number Mode'))
+        ->description(__('Choose whether the overview shows calendar weeks or academic weeks that pause during full-school closure weeks.'));
+    $row->addSelect('overviewWeekNumberMode')->fromArray([
+        'calendar' => __('Calendar Week'),
+        'academic' => __('Academic Week'),
+    ])->selected($overviewWeekNumberMode);
 
     $row = $form->addRow();
     $row->addLabel('summativeWeeklyThresholdDefault', __('Default Summative Assessment Weekly Threshold'))
@@ -185,6 +220,16 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     } else {
         $row = $form->addRow();
         $row->addContent(__('No markbook event types were found.'));
+    }
+
+    if ($isAdminRole) {
+        $row = $form->addRow();
+        $row->addHeading(__('Permissions'));
+
+        $row = $form->addRow();
+        $row->addLabel('managePermissions', __('User Permissions'))
+            ->description(__('Open User Admin permissions for this module.'));
+        $row->addContent('<a class="button buttonAsLink" href="'.htmlspecialchars($permissionsURL).'">'.__('Manage User Permissions').'</a>');
     }
 
     $row = $form->addRow();

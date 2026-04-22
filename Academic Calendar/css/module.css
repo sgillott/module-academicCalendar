@@ -54,6 +54,21 @@
 
 .acColorSetting > button {
     order: 2;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    padding: 0;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.acColorSetting > button i,
+.acColorSetting > button svg {
+    margin: 0;
 }
 
 .acColorSetting .acColorSettingInput {

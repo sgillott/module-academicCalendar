@@ -16,7 +16,7 @@ $description = 'Homework calendar for students, parents and staff.';
 $entryURL    = 'calendar_view.php';
 $type        = 'Additional';
 $category    = 'Learn';
-$version     = '0.4.00';
+$version     = '0.5.04';
 $author      = 'Steve Gillott';
 $url         = '';
 
@@ -32,9 +32,11 @@ $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `na
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'eventTypeMeta', 'Event Type Meta', 'JSON map of event type visibility and classification metadata.', '{}');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'defaultAssessmentFilter', 'Default Assessment Filter', 'Default user filter for formative and summative assessment events.', '{\"formative\":\"Y\",\"summative\":\"Y\",\"none\":\"Y\"}');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'defaultStaffView', 'Default Staff View', 'Default filter for staff in Homework Calendar.', 'all');";
+$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'staffEventFormat', 'Staff Event Format', 'Choose how staff homework and assessment labels are shown in the calendar.', 'codeTitle');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'gibbonYearGroupIDList', 'Year Groups', 'Academic Calendar is enabled for these year groups.', '');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'summativeWeeklyThresholdDefault', 'Default Summative Weekly Threshold', 'Fallback threshold used when a year group does not have its own setting.', '3');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'summativeWeeklyThresholdByYearGroup', 'Summative Weekly Threshold by Year Group', 'JSON map of gibbonYearGroupID to weekly threshold.', '{}');";
+$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'overviewWeekNumberMode', 'Overview Week Number Mode', 'Choose whether the summative overview shows calendar weeks or academic weeks.', 'academic');";
 
 // Action definitions
 $actionRows = [];
@@ -74,8 +76,8 @@ $actionRows[] = [
     'defaultPermissionParent'   => 'N',
     'defaultPermissionSupport'  => 'N',
     'categoryPermissionStaff'   => 'Y',
-    'categoryPermissionStudent' => 'N',
-    'categoryPermissionParent'  => 'N',
+    'categoryPermissionStudent' => 'Y',
+    'categoryPermissionParent'  => 'Y',
     'categoryPermissionOther'   => 'N',
 ];
 
@@ -86,6 +88,26 @@ $actionRows[] = [
     'description'               => 'Configure Homework Calendar settings.',
     'URLList'                   => 'settings_manage.php,settings_manageProcess.php',
     'entryURL'                  => 'settings_manage.php',
+    'entrySidebar'              => 'Y',
+    'menuShow'                  => 'Y',
+    'defaultPermissionAdmin'    => 'Y',
+    'defaultPermissionTeacher'  => 'N',
+    'defaultPermissionStudent'  => 'N',
+    'defaultPermissionParent'   => 'N',
+    'defaultPermissionSupport'  => 'N',
+    'categoryPermissionStaff'   => 'Y',
+    'categoryPermissionStudent' => 'N',
+    'categoryPermissionParent'  => 'N',
+    'categoryPermissionOther'   => 'N',
+];
+
+$actionRows[] = [
+    'name'                      => 'Backup and Restore Settings',
+    'precedence'                => '0',
+    'category'                  => 'Settings',
+    'description'               => 'Export and restore Academic Calendar gibbonSetting values.',
+    'URLList'                   => 'backup_restore.php,backup_restoreProcess.php',
+    'entryURL'                  => 'backup_restore.php',
     'entrySidebar'              => 'Y',
     'menuShow'                  => 'Y',
     'defaultPermissionAdmin'    => 'Y',
@@ -124,18 +146,18 @@ $hooks = [];
 
 $array = [];
 $array['sourceModuleName'] = 'Academic Calendar';
-$array['sourceModuleAction'] = 'Homework Calendar';
+$array['sourceModuleAction'] = 'Homework/Assessment Calendar';
 $array['sourceModuleInclude'] = 'hook_staffDashboard_homeworkView.php';
 $hooks[] = "INSERT INTO `gibbonHook` (`gibbonHookID`, `name`, `type`, `options`, gibbonModuleID) VALUES (NULL, 'Homework', 'Staff Dashboard', '".serialize($array)."', (SELECT gibbonModuleID FROM gibbonModule WHERE name='$name'));";
 
 $array = [];
 $array['sourceModuleName'] = 'Academic Calendar';
-$array['sourceModuleAction'] = 'Homework Calendar';
+$array['sourceModuleAction'] = 'Homework/Assessment Calendar';
 $array['sourceModuleInclude'] = 'hook_studentDashboard_homeworkView.php';
 $hooks[] = "INSERT INTO `gibbonHook` (`gibbonHookID`, `name`, `type`, `options`, gibbonModuleID) VALUES (NULL, 'Homework', 'Student Dashboard', '".serialize($array)."', (SELECT gibbonModuleID FROM gibbonModule WHERE name='$name'));";
 
 $array = [];
 $array['sourceModuleName'] = 'Academic Calendar';
-$array['sourceModuleAction'] = 'Homework Calendar';
+$array['sourceModuleAction'] = 'Homework/Assessment Calendar';
 $array['sourceModuleInclude'] = 'hook_parentalDashboard_homeworkView.php';
 $hooks[] = "INSERT INTO `gibbonHook` (`gibbonHookID`, `name`, `type`, `options`, gibbonModuleID) VALUES (NULL, 'Homework', 'Parental Dashboard', '".serialize($array)."', (SELECT gibbonModuleID FROM gibbonModule WHERE name='$name'));";

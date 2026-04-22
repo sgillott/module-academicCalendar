@@ -1,7 +1,30 @@
 CHANGELOG
 =========
 
-v0.4.00 (Unreleased)
+v0.5.04 (2026-04-22)
+--------------------
+- Moved `Overview Week Number Mode` to the top of the Summative Assessment Overview settings block.
+- Changed the default overview week-number mode to `Academic Week`.
+
+v0.5.03 (Unreleased)
+--------------------
+- Added `Overview Week Number Mode` setting for the Summative Assessment Overview.
+- Added support for showing either calendar weeks or academic weeks in the overview.
+- Academic week numbering now starts at 1 and does not increment during full-school-closure weeks.
+
+v0.5.02 (Unreleased)
+--------------------
+- Added support for parents and students to be able to view the Summative Assessment Overview (default is off).
+
+v0.5.01 (Unreleased)
+--------------------
+- Added Backup and Restore Settings page in case it is needed to uninstall and restore the module to add additional views in the future.
+
+v0.5.00 (Unreleased)
+--------------------
+- Fix Hook not displaying on dashboards
+
+v0.4.00 (2026-04-21)
 --------------------
 - Added scaffolding for a new `Summative Overview` page (weekly matrix layout).
 - Added weekly summative assessment counts per enabled year group in `Summative Overview`.
