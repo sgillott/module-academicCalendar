@@ -46,6 +46,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
     $yearGroups = $yearGroupGateway->queryYearGroups($criteria)->toArray();
     $yearGroups = ac_normalizeYearGroupRows($yearGroups);
     $yearGroups = ac_filterYearGroupsByEnabled($yearGroups, $enabledYearGroupIDs);
+    $yearGroupMap = ac_buildYearGroupMap($yearGroups);
 
     $roleCategory = (string) $session->get('gibbonRoleIDCurrentCategory');
     $restrictedYearGroupIDs = [];
@@ -140,8 +141,6 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
     } else {
         $selectedDisplayYearGroupIDs = ac_parseIDList((string) $displayYearGroupParam);
     }
-    $showOnlyWeeksWithActivity = strtoupper((string) ($_GET['activityOnly'] ?? 'N')) === 'Y';
-
     $yearGroupIDs = array_column($yearGroups, 'gibbonYearGroupID');
     $yearGroupLookup = array_fill_keys(array_map('strval', $yearGroupIDs), true);
     $selectedDisplayYearGroupIDs = array_values(array_filter($selectedDisplayYearGroupIDs, function ($yearGroupID) use ($yearGroupLookup) {
@@ -183,9 +182,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
     $academicWeekCounter = 0;
 
     $weeklyCounts = [];
-    $weeklySubjects = [];
-    $weeklySubjectDetails = [];
-    $weeklySubjectColors = [];
+    $weeklyAssessmentGroups = [];
 
     foreach ($assessmentRows as $assessmentRow) {
         $type = trim((string) ($assessmentRow['assessmentType'] ?? ''));
@@ -214,34 +211,43 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
         }
 
         $subject = ac_getAssessmentDisplayValue($assessmentRow, $assessmentDisplayBasis, __('Assessment'));
+        $assessmentTitle = trim((string) ($assessmentRow['assessmentName'] ?? ''));
+        if ($assessmentTitle === '') {
+            $assessmentTitle = __('Assessment');
+        }
 
         foreach ($matchingYearGroupIDs as $yearGroupID) {
-            if (!isset($weeklySubjects[$weekKey][$yearGroupID][$subject])) {
-                $weeklyCounts[$weekKey][$yearGroupID] = (int) ($weeklyCounts[$weekKey][$yearGroupID] ?? 0) + 1;
-            }
-            $weeklySubjects[$weekKey][$yearGroupID][$subject] = (int) ($weeklySubjects[$weekKey][$yearGroupID][$subject] ?? 0) + 1;
-
-            $assessmentName = trim((string) ($assessmentRow['assessmentName'] ?? ''));
-            if ($assessmentName === '') {
-                $assessmentName = __('Assessment');
-            }
-
-            $classLabel = trim((string) ($assessmentRow['classNameShort'] ?? ''));
-            if ($classLabel === '') {
-                $classLabel = trim((string) ($assessmentRow['className'] ?? ''));
-            }
-
-            $detailLine = $assessmentName;
-            if ($classLabel !== '') {
-                $detailLine .= ' ('.$classLabel.')';
-            }
-
             $assessmentType = trim((string) ($assessmentRow['assessmentType'] ?? ''));
-            if ($assessmentType !== '') {
-                $detailLine .= ' - '.$assessmentType;
-            }
+            $classification = isset($summativeTypes[$assessmentType]) ? 'summative' : '';
+            $cellYearGroupsText = (string) ($yearGroupMap[$yearGroupID] ?? '');
+            $mergeYearGroupsText = $roleCategory === 'Staff' ? $cellYearGroupsText : '';
+            $mergeKey = ac_buildAssessmentMergeKey(
+                $assessmentRow,
+                $subject,
+                $assessmentTitle,
+                $classification,
+                $mergeYearGroupsText
+            );
 
-            $weeklySubjectDetails[$weekKey][$yearGroupID][$subject][] = $detailLine;
+            if (!isset($weeklyAssessmentGroups[$weekKey][$yearGroupID][$mergeKey])) {
+                $weeklyCounts[$weekKey][$yearGroupID] = (int) ($weeklyCounts[$weekKey][$yearGroupID] ?? 0) + 1;
+                $weeklyAssessmentGroups[$weekKey][$yearGroupID][$mergeKey] = [
+                    'subject' => $subject,
+                    'assessmentTitle' => $assessmentTitle,
+                    'classification' => $classification,
+                    'count' => 1,
+                    'label' => $subject,
+                    'tooltipBlocks' => [
+                        ac_buildAssessmentTooltipLines($assessmentRow, $assessmentTitle, $assessmentType),
+                    ],
+                    'colorCounts' => [],
+                ];
+            } else {
+                $weeklyAssessmentGroups[$weekKey][$yearGroupID][$mergeKey]['count']++;
+
+                $weeklyAssessmentGroups[$weekKey][$yearGroupID][$mergeKey]['tooltipBlocks'][] =
+                    ac_buildAssessmentTooltipLines($assessmentRow, $assessmentTitle, $assessmentType);
+            }
 
             $subjectColor = ac_resolveAssessmentEventColor(
                 (string) ($assessmentRow['assessmentColor'] ?? ''),
@@ -252,7 +258,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
                 false
             );
             if ($subjectColor !== null) {
-                $weeklySubjectColors[$weekKey][$yearGroupID][$subject][$subjectColor] = (int) ($weeklySubjectColors[$weekKey][$yearGroupID][$subject][$subjectColor] ?? 0) + 1;
+                $weeklyAssessmentGroups[$weekKey][$yearGroupID][$mergeKey]['colorCounts'][$subjectColor] =
+                    (int) ($weeklyAssessmentGroups[$weekKey][$yearGroupID][$mergeKey]['colorCounts'][$subjectColor] ?? 0) + 1;
             }
         }
     }
@@ -318,20 +325,6 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
             }
         }
 
-        $weekHasActivity = false;
-        foreach ($displayYearGroups as $group) {
-            $yearGroupID = (string) $group['gibbonYearGroupID'];
-            if ((int) ($weeklyCounts[$weekKey][$yearGroupID] ?? 0) > 0) {
-                $weekHasActivity = true;
-                break;
-            }
-        }
-
-        if ($showOnlyWeeksWithActivity && !$weekHasActivity && empty($weekSpecialDays)) {
-            $cursor = $cursor->modify('+7 days');
-            continue;
-        }
-
         $weekRow = [
             'calendarWeekNumber' => (int) $weekStart->format('W'),
             'academicWeekNumber' => null,
@@ -358,7 +351,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
 
     echo '<h2 class="acOverviewTitle">'.htmlspecialchars((string) ($schoolYear['name'] ?? __('Academic Year'))).'</h2>';
 
-    $filtersOpen = $selectedTermID !== '' || !empty($selectedDisplayYearGroupIDs) || $showOnlyWeeksWithActivity;
+    $filtersOpen = $selectedTermID !== '' || !empty($selectedDisplayYearGroupIDs);
     echo '<details class="acOverviewFilterPanel"'.($filtersOpen ? ' open' : '').'>';
     echo '<summary class="acOverviewFilterSummary">'.__('Filter options').'</summary>';
     echo '<div class="acOverviewFilterBody">';
@@ -397,13 +390,6 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
     echo '</select>';
     echo '</div>';
 
-    echo '<div class="acOverviewField acOverviewFieldCheckbox">';
-    echo '<label class="acOverviewCheckbox">';
-    echo '<input type="checkbox" name="activityOnly" value="Y" '.($showOnlyWeeksWithActivity ? 'checked' : '').'> ';
-    echo __('Only Weeks With Activity');
-    echo '</label>';
-    echo '</div>';
-
     echo '<div class="acOverviewField acOverviewFieldButton">';
     echo '<button type="submit" class="acOverviewFilterButton">'.__('Go').'</button>';
     echo '</div>';
@@ -417,7 +403,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
         echo '</div>';
     }
 
-    $renderTermTable = function (string $heading, string $dateRange, array $weeks) use ($displayYearGroups, $thresholdByYearGroup, $defaultThreshold, $weeklyCounts, $weeklySubjects, $weeklySubjectDetails, $weeklySubjectColors, $overviewWeekNumberMode) {
+    $renderTermTable = function (string $heading, string $dateRange, array $weeks) use ($displayYearGroups, $thresholdByYearGroup, $defaultThreshold, $weeklyCounts, $weeklyAssessmentGroups, $overviewWeekNumberMode) {
         if (empty($weeks)) {
             return;
         }
@@ -432,7 +418,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
             $yearGroupID = (string) $group['gibbonYearGroupID'];
             $label = (string) ($group['nameShort'] ?: $group['name']);
             $threshold = (int) ($thresholdByYearGroup[$yearGroupID] ?? $defaultThreshold);
-            echo '<th>'.htmlspecialchars($label).' <span class="acOverviewThreshold">('.$threshold.')</span></th>';
+            echo '<th>'.htmlspecialchars($label).' <span class="acOverviewThreshold">(MAX '.(int) $threshold.')</span></th>';
         }
         echo '<th>'.__('School Events').'</th>';
         echo '</tr></thead>';
@@ -453,9 +439,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
                 $yearGroupID = (string) $group['gibbonYearGroupID'];
                 $count = (int) ($weeklyCounts[$weekKey][$yearGroupID] ?? 0);
                 $threshold = (int) ($thresholdByYearGroup[$yearGroupID] ?? $defaultThreshold);
-                $subjectCounts = $weeklySubjects[$weekKey][$yearGroupID] ?? [];
+                $assessmentGroups = array_values($weeklyAssessmentGroups[$weekKey][$yearGroupID] ?? []);
 
-                if ($count < 1 || empty($subjectCounts)) {
+                if ($count < 1 || empty($assessmentGroups)) {
                     echo '<td class="acOverviewPlaceholder acOverviewEmptyCell">&ndash;</td>';
                     continue;
                 }
@@ -467,30 +453,13 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
                     $cellClass = 'acOverviewSubjectsAtThreshold';
                 }
 
-                ksort($subjectCounts);
-                $subjectLines = [];
-                foreach ($subjectCounts as $subject => $subjectCount) {
-                    $line = (string) $subject;
-                    if ((int) $subjectCount > 1) {
-                        $line .= ' x'.(int) $subjectCount;
-                    }
-
-                    $detailLines = $weeklySubjectDetails[$weekKey][$yearGroupID][$subject] ?? [];
-                    $detailLines = array_values(array_unique(array_map('strval', $detailLines)));
-                    sort($detailLines, SORT_NATURAL | SORT_FLAG_CASE);
-                    $tooltip = implode("\n", $detailLines);
-
-                    $subjectLines[] = [
-                        'label' => $line,
-                        'tooltip' => $tooltip,
-                        'subject' => $subject,
-                    ];
-                }
+                usort($assessmentGroups, function (array $a, array $b): int {
+                    return strnatcasecmp((string) ($a['label'] ?? ''), (string) ($b['label'] ?? ''));
+                });
 
                 echo '<td class="acOverviewSubjectsCell '.$cellClass.'">';
-                foreach ($subjectLines as $line) {
-                    $subjectKey = (string) ($line['subject'] ?? '');
-                    $colorCounts = $weeklySubjectColors[$weekKey][$yearGroupID][$subjectKey] ?? [];
+                foreach ($assessmentGroups as $groupLine) {
+                    $colorCounts = is_array($groupLine['colorCounts'] ?? null) ? $groupLine['colorCounts'] : [];
                     $chipStyle = '';
                     if (!empty($colorCounts)) {
                         arsort($colorCounts, SORT_NUMERIC);
@@ -499,9 +468,11 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
                         $chipStyle = ' style="background-color: '.htmlspecialchars($backgroundColor, ENT_QUOTES).'; border-color: '.htmlspecialchars($backgroundColor, ENT_QUOTES).'; color: '.htmlspecialchars($textColor, ENT_QUOTES).';"';
                     }
 
-                    $tooltipAttr = trim((string) ($line['tooltip'] ?? ''));
-                    $titleAttr = $tooltipAttr !== '' ? ' title="'.htmlspecialchars($tooltipAttr, ENT_QUOTES).'"' : '';
-                    echo '<div class="acOverviewSubjectLine"'.$titleAttr.$chipStyle.'>'.htmlspecialchars((string) ($line['label'] ?? '')).'</div>';
+                    $tooltipAttr = ac_formatAssessmentTooltipBlocks(
+                        is_array($groupLine['tooltipBlocks'] ?? null) ? $groupLine['tooltipBlocks'] : []
+                    );
+                    $tooltipDataAttr = $tooltipAttr !== '' ? ' data-tooltip="'.htmlspecialchars($tooltipAttr, ENT_QUOTES).'"' : '';
+                    echo '<div class="acOverviewSubjectLine"'.$tooltipDataAttr.$chipStyle.'>'.htmlspecialchars((string) ($groupLine['label'] ?? '')).'</div>';
                 }
                 echo '</td>';
             }

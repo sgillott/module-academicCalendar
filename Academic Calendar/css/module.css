@@ -227,6 +227,15 @@ input.acEventTypeVisible[type="checkbox"] {
     box-sizing: border-box;
 }
 
+#academicCalendar .acYearGroupToken {
+    display: inline-block;
+    padding: 0 0.35rem;
+    border-radius: 9999px;
+    font-weight: 700;
+    line-height: 1.25;
+    margin-right: 0.1rem;
+}
+
 #academicCalendar .fc .fc-daygrid-block-event .fc-event-main {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -301,6 +310,7 @@ input.acEventTypeVisible[type="checkbox"] {
 
 .acOverviewEmptyCell {
     background: #f3f4f6;
+    box-shadow: inset 0 0 0 1px #cbd5e1;
 }
 
 .acOverviewFilters {
@@ -408,21 +418,26 @@ input.acEventTypeVisible[type="checkbox"] {
 .acOverviewSubjectsCell {
     vertical-align: top;
     min-width: 120px;
+    box-shadow: inset 0 0 0 1px #cbd5e1;
 }
 
 .acOverviewSubjectsOk {
     background: #ecfeff;
+    box-shadow: inset 0 0 0 1px #22c55e;
 }
 
 .acOverviewSubjectsAtThreshold {
     background: #fff7ed;
+    box-shadow: inset 0 0 0 1px #f59e0b;
 }
 
 .acOverviewSubjectsExceed {
     background: #fef2f2;
+    box-shadow: inset 0 0 0 1px #ef4444;
 }
 
 .acOverviewSubjectLine {
+    position: relative;
     display: block;
     width: 100%;
     box-sizing: border-box;
@@ -434,8 +449,42 @@ input.acEventTypeVisible[type="checkbox"] {
     margin: 0 0 4px 0;
 }
 
-.acOverviewSubjectLine[title] {
+.acOverviewSubjectLine[data-tooltip] {
     cursor: help;
+}
+
+.acOverviewSubjectLine[data-tooltip]:hover::after,
+.acOverviewSubjectLine[data-tooltip]:focus-visible::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 0;
+    top: calc(100% + 6px);
+    z-index: 50;
+    min-width: 220px;
+    max-width: 360px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(17, 24, 39, 0.96);
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.22);
+    white-space: pre-line;
+    line-height: 1.45;
+    font-size: 0.82rem;
+    text-align: left;
+    pointer-events: none;
+}
+
+.acOverviewSubjectLine[data-tooltip]:hover::before,
+.acOverviewSubjectLine[data-tooltip]:focus-visible::before {
+    content: "";
+    position: absolute;
+    left: 14px;
+    top: calc(100% + 1px);
+    z-index: 51;
+    border-width: 6px;
+    border-style: solid;
+    border-color: transparent transparent rgba(17, 24, 39, 0.96) transparent;
+    pointer-events: none;
 }
 
 .acOverviewSubjectLine:last-child {

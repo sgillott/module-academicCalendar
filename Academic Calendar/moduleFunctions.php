@@ -575,6 +575,151 @@ function ac_getAssessmentDisplayValue(array $row, string $basis, string $fallbac
 }
 
 /**
+ * Build a class label for assessment tooltips.
+ *
+ * Prefers the Gibbon-style `courseShort.classShort` format and falls back to
+ * the most specific class text available.
+ *
+ * @param array<string, mixed> $row Assessment row data.
+ *
+ * @return string
+ */
+function ac_getAssessmentClassLabel(array $row): string
+{
+    $courseShortCode = trim((string) ($row['courseNameShort'] ?? ''));
+    $classShortCode = trim((string) ($row['classNameShort'] ?? ''));
+    if ($courseShortCode !== '' && $classShortCode !== '') {
+        return $courseShortCode.'.'.$classShortCode;
+    }
+
+    if ($courseShortCode !== '' || $classShortCode !== '') {
+        return trim($courseShortCode.$classShortCode);
+    }
+
+    return trim((string) ($row['className'] ?? ''));
+}
+
+/**
+ * Build formatted tooltip lines for a single assessment row.
+ *
+ * @param array<string, mixed> $row Assessment row data.
+ * @param string $assessmentTitle Display title for the assessment.
+ * @param string $type Assessment type label.
+ *
+ * @return array<int, string>
+ */
+function ac_buildAssessmentTooltipLines(array $row, string $assessmentTitle, string $type): array
+{
+    $tooltipLines = [$assessmentTitle];
+
+    $assessmentDate = trim((string) ($row['assessmentDate'] ?? ''));
+    if ($assessmentDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $assessmentDate) === 1) {
+        $tooltipLines[] = __('Assessment Date').': '.date('j F Y', strtotime($assessmentDate));
+    }
+
+    $classLabel = ac_getAssessmentClassLabel($row);
+    if ($classLabel !== '') {
+        $tooltipLines[] = __('Class').': '.$classLabel;
+    }
+
+    if ($type !== '') {
+        $tooltipLines[] = __('Type').': '.$type;
+    }
+
+    $description = trim((string) ($row['assessmentDescription'] ?? ''));
+    if ($description !== '') {
+        $tooltipLines[] = __('Details').': '.$description;
+    }
+
+    return $tooltipLines;
+}
+
+/**
+ * Build the merge key for same-day assessment grouping.
+ *
+ * Matching requires the same date, display value, assessment title,
+ * classification and optional staff year-group context.
+ *
+ * @param array<string, mixed> $row Assessment row data.
+ * @param string $subject Resolved subject/display value.
+ * @param string $assessmentTitle Assessment title.
+ * @param string $classification Assessment classification.
+ * @param string $yearGroupsText Optional year-group text used in staff view.
+ *
+ * @return string
+ */
+function ac_buildAssessmentMergeKey(
+    array $row,
+    string $subject,
+    string $assessmentTitle,
+    string $classification,
+    string $yearGroupsText = ''
+): string {
+    return implode('|', [
+        date('Y-m-d', strtotime((string) ($row['assessmentDate'] ?? ''))),
+        $subject,
+        mb_strtolower($assessmentTitle),
+        $classification,
+        $yearGroupsText,
+    ]);
+}
+
+/**
+ * Build an assessment event title using the same logic as the calendar.
+ *
+ * @param string $subject Resolved subject/display value.
+ * @param string $assessmentTitle Assessment title.
+ * @param string $roleCategory Current role category.
+ * @param string $assessmentDisplayBasis Normalized display basis.
+ * @param string $yearGroupsText Optional rendered year-group text.
+ *
+ * @return string
+ */
+function ac_buildAssessmentEventTitle(
+    string $subject,
+    string $assessmentTitle,
+    string $roleCategory,
+    string $assessmentDisplayBasis,
+    string $yearGroupsText = ''
+): string {
+    $title = $subject;
+    if ($roleCategory === 'Staff' && $assessmentDisplayBasis === 'learningArea' && $yearGroupsText !== '') {
+        $title = '('.$yearGroupsText.') '.$subject;
+    }
+
+    if ($assessmentTitle !== '' && mb_strtolower($assessmentTitle) !== mb_strtolower($subject)) {
+        $title .= ' - '.$assessmentTitle;
+    }
+
+    return $title;
+}
+
+/**
+ * Format one or more assessment tooltip blocks for HTML title attributes.
+ *
+ * @param array<int, array<int, string>> $tooltipBlocks Tooltip blocks.
+ *
+ * @return string
+ */
+function ac_formatAssessmentTooltipBlocks(array $tooltipBlocks): string
+{
+    $formattedBlocks = [];
+    foreach ($tooltipBlocks as $block) {
+        $lines = array_values(array_unique(array_filter(array_map('strval', $block), function ($line) {
+            return trim($line) !== '';
+        })));
+
+        if (!empty($lines)) {
+            $formattedBlocks[] = implode("\n", $lines);
+        }
+    }
+
+    $formattedBlocks = array_values(array_unique($formattedBlocks));
+
+    return implode("\n\n", $formattedBlocks);
+}
+
+/**
  * Build the subject name and class-code parts for a planner or assessment row.
  *
  * @param array<string, mixed> $row Source row containing course/class fields.
@@ -705,6 +850,47 @@ function ac_colorFromPalette(string $key): string
     $index = abs(crc32($key)) % count($palette);
 
     return $palette[$index];
+}
+
+/**
+ * Build a deterministic year-group color map from ordered year-group rows.
+ *
+ * Uses a stable sequential palette keyed by year-group ID so the same
+ * year-group keeps the same color throughout the current calendar view.
+ *
+ * @param array<int, array<string, mixed>> $rows Normalized year-group rows sorted by sequence.
+ *
+ * @return array<string, string> Map of gibbonYearGroupID => hex color.
+ */
+function ac_buildYearGroupColorMap(array $rows): array
+{
+    $palette = [
+        '#DC2626', // red
+        '#EA580C', // orange
+        '#CA8A04', // amber
+        '#16A34A', // green
+        '#0F766E', // teal
+        '#2563EB', // blue
+        '#4F46E5', // indigo
+        '#9333EA', // violet
+        '#DB2777', // pink
+        '#475569', // slate
+    ];
+
+    $map = [];
+    $index = 0;
+
+    foreach ($rows as $row) {
+        $yearGroupID = (string) ($row['gibbonYearGroupID'] ?? '');
+        if ($yearGroupID === '') {
+            continue;
+        }
+
+        $map[$yearGroupID] = $palette[$index % count($palette)];
+        $index++;
+    }
+
+    return $map;
 }
 
 /**
@@ -1069,6 +1255,89 @@ function ac_buildYearGroupMap(array $rows): array
     }
 
     return $map;
+}
+
+/**
+ * Build a map of year-group ID => sequence number.
+ *
+ * @param array<int, array<string, mixed>> $rows Normalized year-group rows.
+ *
+ * @return array<string, int> Lookup map.
+ */
+function ac_buildYearGroupSequenceMap(array $rows): array
+{
+    $map = [];
+
+    foreach ($rows as $row) {
+        $id = (string) ($row['gibbonYearGroupID'] ?? '');
+        if ($id === '') {
+            continue;
+        }
+
+        $sequenceNumber = $row['sequenceNumber'] ?? null;
+        if ($sequenceNumber === null || $sequenceNumber === '') {
+            continue;
+        }
+
+        $map[$id] = (int) $sequenceNumber;
+    }
+
+    return $map;
+}
+
+/**
+ * Get the lowest sequence number from a course year-group list.
+ *
+ * @param string $yearGroupIDList CSV year-group list from the course.
+ * @param array<string, int> $sequenceMap Lookup map of ID => sequence.
+ *
+ * @return int|null Lowest matching sequence number or null.
+ */
+function ac_getYearGroupSequenceForEvent(string $yearGroupIDList, array $sequenceMap): ?int
+{
+    $matches = [];
+
+    foreach (ac_parseIDList($yearGroupIDList) as $yearGroupID) {
+        if (isset($sequenceMap[$yearGroupID])) {
+            $matches[] = (int) $sequenceMap[$yearGroupID];
+        }
+    }
+
+    if (empty($matches)) {
+        return null;
+    }
+
+    sort($matches, SORT_NUMERIC);
+
+    return $matches[0];
+}
+
+/**
+ * Get the primary year-group ID for an event based on the lowest sequence number.
+ *
+ * @param string $yearGroupIDList CSV year-group list from the course.
+ * @param array<string, int> $sequenceMap Lookup map of ID => sequence.
+ *
+ * @return string|null Primary year-group ID or null when none match.
+ */
+function ac_getPrimaryYearGroupIDForEvent(string $yearGroupIDList, array $sequenceMap): ?string
+{
+    $bestYearGroupID = null;
+    $bestSequence = null;
+
+    foreach (ac_parseIDList($yearGroupIDList) as $yearGroupID) {
+        if (!isset($sequenceMap[$yearGroupID])) {
+            continue;
+        }
+
+        $sequence = (int) $sequenceMap[$yearGroupID];
+        if ($bestSequence === null || $sequence < $bestSequence) {
+            $bestSequence = $sequence;
+            $bestYearGroupID = $yearGroupID;
+        }
+    }
+
+    return $bestYearGroupID;
 }
 
 /**

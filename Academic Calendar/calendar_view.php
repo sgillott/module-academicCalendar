@@ -67,6 +67,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
 
     $yearGroupID = '';
     $yearGroups = [];
+    $yearGroupColorMap = [];
+    $yearGroupBadgeMap = [];
     if ($roleCategory === 'Staff') {
         $hasYearGroupParam = array_key_exists('yearGroupID', $_GET);
         $canFilterAllYearGroups = isActionAccessible(
@@ -94,6 +96,14 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
         }
         if (!$hasYearGroupParam && $yearGroupID === '' && $defaultStaffView === 'yearGroup' && !empty($yearGroups)) {
             $yearGroupID = (string) $yearGroups[0]['gibbonYearGroupID'];
+        }
+
+        $yearGroupColorMap = ac_buildYearGroupColorMap($yearGroups);
+        foreach ($yearGroupColorMap as $groupID => $backgroundColor) {
+            $yearGroupBadgeMap[$groupID] = [
+                'background' => $backgroundColor,
+                'text' => ac_getContrastingTextColor($backgroundColor),
+            ];
         }
     }
 
@@ -259,6 +269,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                 assessmentSummative: '<?= htmlspecialchars($assessmentSummative, ENT_QUOTES); ?>',
                 assessmentNone: '<?= htmlspecialchars($assessmentNone, ENT_QUOTES); ?>'
             };
+            const yearGroupBadgeMap = <?= json_encode($yearGroupBadgeMap, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?> || {};
+            const roleCategory = '<?= htmlspecialchars($roleCategory, ENT_QUOTES); ?>';
             let calendar = null;
             let resizeBound = false;
             let resizeTimer = null;
@@ -380,6 +392,38 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                 scheduleCalendarResize();
             }
 
+            function applyYearGroupTokenColor(info) {
+                if (roleCategory !== 'Staff') {
+                    return;
+                }
+
+                const props = info.event.extendedProps || {};
+                const primaryYearGroupID = (props.primaryYearGroupID || '').toString();
+                const badge = yearGroupBadgeMap[primaryYearGroupID];
+                if (!badge || !badge.background || !badge.text) {
+                    return;
+                }
+
+                const titleNodes = info.el.querySelectorAll('.fc-event-title, .fc-list-event-title, .fc-list-event-title a');
+                titleNodes.forEach(function (node) {
+                    if (!node || node.dataset.acYearGroupStyled === 'Y') {
+                        return;
+                    }
+
+                    const text = (node.textContent || '').trim();
+                    const match = text.match(/^(\([^)]+\))\s+(.*)$/);
+                    if (!match) {
+                        return;
+                    }
+
+                    node.innerHTML = '<span class="acYearGroupToken" style="background-color: ' + badge.background + '; color: ' + badge.text + ';">'
+                        + match[1]
+                        + '</span> '
+                        + match[2];
+                    node.dataset.acYearGroupStyled = 'Y';
+                });
+            }
+
             function initCalendar() {
                 if (calendar || !calendarElement || typeof FullCalendar === 'undefined') {
                     return !!calendar;
@@ -405,6 +449,27 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                         initialView: '<?= $viewType !== '' ? $viewType : '' ?>' || (window.innerWidth < 765 ? 'listMonth' : 'dayGridMonth'),
                         initialDate: '<?= $viewDate !== '' ? $viewDate : '' ?>' || undefined,
                         headerToolbar: headerToolbarForSize(),
+                        eventOrder: function (a, b) {
+                            const aProps = a.extendedProps || {};
+                            const bProps = b.extendedProps || {};
+                            const aSeq = Number.isFinite(Number(aProps.yearGroupSequence)) ? Number(aProps.yearGroupSequence) : Number.MAX_SAFE_INTEGER;
+                            const bSeq = Number.isFinite(Number(bProps.yearGroupSequence)) ? Number(bProps.yearGroupSequence) : Number.MAX_SAFE_INTEGER;
+
+                            if (aSeq !== bSeq) {
+                                return aSeq - bSeq;
+                            }
+
+                            const aTitle = (a.title || '').toString().toLowerCase();
+                            const bTitle = (b.title || '').toString().toLowerCase();
+                            if (aTitle < bTitle) {
+                                return -1;
+                            }
+                            if (aTitle > bTitle) {
+                                return 1;
+                            }
+
+                            return 0;
+                        },
                         eventSources: [{
                             url: endpoint,
                             method: 'GET',
@@ -511,6 +576,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                             if (lines.length > 0) {
                                 info.el.setAttribute('title', lines.join('\n'));
                             }
+
+                            applyYearGroupTokenColor(info);
                         },
                         eventClick: function (info) {
                             if (info.event.url) {

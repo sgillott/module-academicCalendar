@@ -90,6 +90,7 @@ $assessmentRows = ac_filterEventRowsByEnabledYearGroups($assessmentRows, $enable
 $events = [];
 $absoluteURL = $session->get('absoluteURL');
 $yearGroupMap = [];
+$yearGroupSequenceMap = [];
 if ($roleCategory === 'Staff') {
     $criteria = $yearGroupGateway
         ->newQueryCriteria(true)
@@ -98,6 +99,7 @@ if ($roleCategory === 'Staff') {
     $allYearGroups = ac_normalizeYearGroupRows($allYearGroups);
     $allYearGroups = ac_filterYearGroupsByEnabled($allYearGroups, $enabledYearGroupIDs);
     $yearGroupMap = ac_buildYearGroupMap($allYearGroups);
+    $yearGroupSequenceMap = ac_buildYearGroupSequenceMap($allYearGroups);
 }
 
 $buildParentMarkbookViewURL = function () use ($absoluteURL, $childPersonID, $canViewMarkbook) {
@@ -176,6 +178,12 @@ foreach ($homeworkRows as $row) {
             'subject' => $subject,
             'homeworkTitle' => $homeworkTitle,
             'yearGroups' => $yearGroupsText,
+            'primaryYearGroupID' => $roleCategory === 'Staff'
+                ? ac_getPrimaryYearGroupIDForEvent((string) ($row['gibbonYearGroupIDList'] ?? ''), $yearGroupSequenceMap)
+                : null,
+            'yearGroupSequence' => $roleCategory === 'Staff'
+                ? ac_getYearGroupSequenceForEvent((string) ($row['gibbonYearGroupIDList'] ?? ''), $yearGroupSequenceMap)
+                : null,
             'type' => $type,
             'classification' => $classification,
             'source' => 'Planner',
@@ -215,13 +223,13 @@ foreach ($assessmentRows as $row) {
         ? ac_buildYearGroupsText((string) ($row['gibbonYearGroupIDList'] ?? ''), $yearGroupMap)
         : '';
 
-    $title = $subject;
-    if ($roleCategory === 'Staff' && $assessmentDisplayBasis === 'learningArea' && $yearGroupsText !== '') {
-        $title = '('.$yearGroupsText.') '.$subject;
-    }
-    if ($assessmentTitle !== '' && mb_strtolower($assessmentTitle) !== mb_strtolower($subject)) {
-        $title .= ' - '.$assessmentTitle;
-    }
+    $title = ac_buildAssessmentEventTitle(
+        $subject,
+        $assessmentTitle,
+        $roleCategory,
+        $assessmentDisplayBasis,
+        $yearGroupsText
+    );
 
     $color = ac_resolveAssessmentEventColor(
         (string) ($row['assessmentColor'] ?? ''),
@@ -260,28 +268,8 @@ foreach ($assessmentRows as $row) {
         $url = $buildParentMarkbookViewURL();
     }
 
-    $tooltipLines = [];
-    $tooltipLines[] = $assessmentTitle;
-    $courseShortCode = trim((string) ($row['courseNameShort'] ?? ''));
-    $classShortCode = trim((string) ($row['classNameShort'] ?? ''));
-    $classLabel = '';
-    if ($courseShortCode !== '' && $classShortCode !== '') {
-        $classLabel = $courseShortCode.'.'.$classShortCode;
-    } elseif ($courseShortCode !== '' || $classShortCode !== '') {
-        $classLabel = trim($courseShortCode.$classShortCode);
-    } else {
-        $classLabel = trim((string) ($row['className'] ?? ''));
-    }
-    if ($classLabel !== '') {
-        $tooltipLines[] = __('Class').': '.$classLabel;
-    }
-    if ($type !== '') {
-        $tooltipLines[] = __('Type').': '.$type;
-    }
+    $tooltipLines = ac_buildAssessmentTooltipLines($row, $assessmentTitle, $type);
     $description = trim((string) ($row['assessmentDescription'] ?? ''));
-    if ($description !== '') {
-        $tooltipLines[] = __('Details').': '.$description;
-    }
 
     $event = [
         'id' => 'mbc-'.(string) $row['gibbonMarkbookColumnID'],
@@ -300,6 +288,12 @@ foreach ($assessmentRows as $row) {
             'subject' => $subject,
             'homeworkTitle' => $assessmentTitle,
             'yearGroups' => $yearGroupsText,
+            'primaryYearGroupID' => $roleCategory === 'Staff'
+                ? ac_getPrimaryYearGroupIDForEvent((string) ($row['gibbonYearGroupIDList'] ?? ''), $yearGroupSequenceMap)
+                : null,
+            'yearGroupSequence' => $roleCategory === 'Staff'
+                ? ac_getYearGroupSequenceForEvent((string) ($row['gibbonYearGroupIDList'] ?? ''), $yearGroupSequenceMap)
+                : null,
             'type' => $type,
             'classification' => $classification,
             'source' => 'Markbook',
@@ -317,13 +311,13 @@ foreach ($assessmentRows as $row) {
         continue;
     }
 
-    $mergeKey = implode('|', [
-        date('Y-m-d', strtotime((string) $row['assessmentDate'])),
+    $mergeKey = ac_buildAssessmentMergeKey(
+        $row,
         $subject,
-        mb_strtolower($assessmentTitle),
+        $assessmentTitle,
         $classification,
-        $roleCategory === 'Staff' ? $yearGroupsText : '',
-    ]);
+        $roleCategory === 'Staff' ? $yearGroupsText : ''
+    );
 
     if (!isset($assessmentEvents[$mergeKey])) {
         $event['extendedProps']['mergedCount'] = 1;
@@ -341,10 +335,13 @@ foreach ($assessmentRows as $row) {
 
     $mergedCount = (int) $assessmentEvents[$mergeKey]['extendedProps']['mergedCount'];
     if ($roleCategory === 'Staff' && $assessmentDisplayBasis === 'learningArea') {
-        $assessmentEvents[$mergeKey]['title'] = ($yearGroupsText !== '' ? '('.$yearGroupsText.') ' : '').$subject;
-        if ($assessmentTitle !== '' && mb_strtolower($assessmentTitle) !== mb_strtolower($subject)) {
-            $assessmentEvents[$mergeKey]['title'] .= ' - '.$assessmentTitle;
-        }
+        $assessmentEvents[$mergeKey]['title'] = ac_buildAssessmentEventTitle(
+            $subject,
+            $assessmentTitle,
+            $roleCategory,
+            $assessmentDisplayBasis,
+            $yearGroupsText
+        );
     } else {
         $assessmentEvents[$mergeKey]['title'] = $subject.' x'.$mergedCount;
     }

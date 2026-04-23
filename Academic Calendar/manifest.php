@@ -16,7 +16,7 @@ $description = 'Homework calendar for students, parents and staff.';
 $entryURL    = 'calendar_view.php';
 $type        = 'Additional';
 $category    = 'Learn';
-$version     = '0.6.00';
+$version     = '0.7.00';
 $author      = 'Steve Gillott';
 $url         = '';
 

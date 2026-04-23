@@ -1,7 +1,20 @@
 CHANGELOG
 =========
 
-v0.6.00 (Unreleased)
+v0.7.00 (2026-04-23)
+--------------------
+- Ordered staff calendar events by year-group sequence number.
+- Ordered summative overview year-group columns by year-group sequence number.
+- Removed the `Only Weeks With Activity` filter from Summative Assessment Overview.
+- Updated overview headers to show thresholds as `MAX` values.
+- Matched summative overview grouping logic to the Homework/Assessment Calendar staff view.
+- Matched summative overview tooltips to the calendar tooltip format.
+- Simplified overview chip labels to show only the configured course/learning-area label.
+- Added assessment date to overview tooltips.
+- Added status borders to overview cells and refined them to a lighter 1px weight.
+- Added deterministic year-group token badges to staff calendar event titles.
+
+v0.6.00 (2026-04-23)
 --------------------
 - Reinstated markbook assessment rows that are linked to Planner entries.
 - Added `Assessment Display Basis` setting for assessment labels and grouped summaries.

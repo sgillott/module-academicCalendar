@@ -1,4 +1,4 @@
-# Academic Calendar (Gibbon Module)
+﻿# Academic Calendar (Gibbon Module)
 
 Academic Calendar adds a homework and assessment calendar to Gibbon for Students, Parents, and Staff, combining Planner homework deadlines and Markbook assessment dates.
 
@@ -126,7 +126,7 @@ Actions defined in `manifest.php` include:
 
 ## Version
 
-Current working version: `0.6.00`
+Current working version: `0.7.00`
 
 ## License
 
