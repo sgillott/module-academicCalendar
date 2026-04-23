@@ -1,28 +1,28 @@
 CHANGELOG
 =========
 
-v0.5.04 (2026-04-22)
+v0.6.00 (Unreleased)
 --------------------
-- Moved `Overview Week Number Mode` to the top of the Summative Assessment Overview settings block.
-- Changed the default overview week-number mode to `Academic Week`.
+- Reinstated markbook assessment rows that are linked to Planner entries.
+- Added `Assessment Display Basis` setting for assessment labels and grouped summaries.
+- Added `Merge Same-Day Assessments` setting for assessment event compaction.
+- Added `Learning Area` support for merged assessment display.
+- Improved merged assessment tooltips to show every merged assessment detail block.
+- Added classification colour settings for formative, summative, and not-classified assessments.
+- Added `Use Assessment Classification Colour in Calendar` toggle for assessment event colouring.
 
-v0.5.03 (Unreleased)
+v0.5.00 (2026-04-22)
 --------------------
+- Fixed the dashboard hook configuration so Homework tabs display reliably again.
+- Added Backup and Restore Settings to export and restore Academic Calendar `gibbonSetting` rows.
+- Added Student and Parent permission availability for Summative Assessment Overview.
+- Restricted Student and Parent overview access to only their allowed year groups.
 - Added `Overview Week Number Mode` setting for the Summative Assessment Overview.
 - Added support for showing either calendar weeks or academic weeks in the overview.
 - Academic week numbering now starts at 1 and does not increment during full-school-closure weeks.
-
-v0.5.02 (Unreleased)
---------------------
-- Added support for parents and students to be able to view the Summative Assessment Overview (default is off).
-
-v0.5.01 (Unreleased)
---------------------
-- Added Backup and Restore Settings page in case it is needed to uninstall and restore the module to add additional views in the future.
-
-v0.5.00 (Unreleased)
---------------------
-- Fix Hook not displaying on dashboards
+- Moved `Overview Week Number Mode` to the top of the Summative Assessment Overview settings block.
+- Changed the default overview week-number mode to `Academic Week`.
+- Improved settings page layout for the Summative Assessment Overview section.
 
 v0.4.00 (2026-04-21)
 --------------------

@@ -145,7 +145,7 @@ $count++;
 $sql[$count][0] = "0.5.02";
 $sql[$count][1] = "
 INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
-SELECT 'Academic Calendar', 'staffEventFormat', 'Staff Event Format', 'Choose how staff homework and assessment labels are shown in the calendar.', 'codeTitle'
+SELECT 'Academic Calendar', 'staffEventFormat', 'Homework Format in Staff Calendar', 'Choose how homework titles appear for staff in the calendar. This controls how course, class code, year group, and title are combined.', 'codeTitle'
 WHERE NOT EXISTS (
     SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='staffEventFormat'
 );end
@@ -169,4 +169,32 @@ $sql[$count][1] = "
 UPDATE gibbonSetting
 SET value='academic'
 WHERE scope='Academic Calendar' AND name='overviewWeekNumberMode' AND (value='' OR value IS NULL OR value='calendar');end
+";
+
+// v0.6.00
+$count++;
+$sql[$count][0] = "0.6.00";
+$sql[$count][1] = "
+INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+SELECT 'Academic Calendar', 'assessmentDisplayBasis', 'Assessment Format in Staff Calendar', 'Choose which course field is used when naming assessment events for staff. This also controls how same-day assessment merges are labelled.', 'courseShortName'
+WHERE NOT EXISTS (
+    SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='assessmentDisplayBasis'
+);end
+INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+SELECT 'Academic Calendar', 'mergeSameDayAssessments', 'Merge Same-Day Assessments', 'Merge assessment rows that share the same display value on the same day.', 'N'
+WHERE NOT EXISTS (
+    SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='mergeSameDayAssessments'
+);end
+INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+SELECT 'Academic Calendar', 'assessmentClassificationColors', 'Assessment Classification Colours', 'JSON map of formative, summative, and not classified colours.', '{\"formative\":\"#F97316\",\"summative\":\"#1D4ED8\",\"none\":\"#9CA3AF\"}'
+WHERE NOT EXISTS (
+    SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='assessmentClassificationColors'
+);end
+INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
+SELECT 'Academic Calendar', 'useAssessmentClassificationColorInCalendar', 'Use Assessment Classification Colour in Calendar', 'When enabled, assessment events on the Homework/Assessment Calendar use the formative, summative, or not classified colours.', 'N'
+WHERE NOT EXISTS (
+    SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='useAssessmentClassificationColorInCalendar'
+);end
+DELETE FROM gibbonSetting
+WHERE scope='Academic Calendar' AND name='assessmentColorPriority';end
 ";

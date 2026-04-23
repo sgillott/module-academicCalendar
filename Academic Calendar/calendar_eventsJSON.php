@@ -42,8 +42,12 @@ $settingGateway = $container->get(SettingGateway::class);
 $yearGroupGateway = $container->get(YearGroupGateway::class);
 $customColors = ac_getColorMap($settingGateway);
 $eventTypeMeta = ac_getEventTypeMeta($settingGateway);
+$assessmentClassificationStyles = ac_buildAssessmentClassificationStyles(ac_getAssessmentClassificationColors($settingGateway));
+$useAssessmentClassificationColorInCalendar = ac_getUseAssessmentClassificationColorInCalendar($settingGateway);
 $defaultAssessmentFilter = ac_getDefaultAssessmentFilter($settingGateway);
 $staffEventFormat = ac_getStaffEventFormat($settingGateway);
+$assessmentDisplayBasis = ac_getAssessmentDisplayBasis($settingGateway);
+$mergeSameDayAssessments = ac_getMergeSameDayAssessments($settingGateway);
 $enabledYearGroupIDs = ac_getEnabledYearGroupIDs($settingGateway);
 $showHomeworkEvents = ac_getShowHomeworkEvents($settingGateway);
 $showAssessmentEvents = ac_getShowAssessmentEvents($settingGateway);
@@ -96,65 +100,19 @@ if ($roleCategory === 'Staff') {
     $yearGroupMap = ac_buildYearGroupMap($allYearGroups);
 }
 
-$buildSubjectParts = function (array $row) {
-    $courseName = trim((string) ($row['courseName'] ?? ''));
-    $courseShort = trim((string) ($row['courseNameShort'] ?? ''));
-    $classShort = trim((string) ($row['classNameShort'] ?? ''));
-
-    $subjectName = $courseName !== '' ? $courseName : '';
-    $subjectCode = '';
-    if ($courseShort !== '' && $classShort !== '') {
-        $subjectCode = $courseShort.'.'.$classShort;
-    } else {
-        $subjectCode = trim($courseShort.$classShort);
+$buildParentMarkbookViewURL = function () use ($absoluteURL, $childPersonID, $canViewMarkbook) {
+    if (!$canViewMarkbook) {
+        return null;
     }
 
-    if ($subjectName === '') {
-        $subjectName = $subjectCode;
-    }
-    if ($subjectCode === '') {
-        $subjectCode = $subjectName;
-    }
-
-    return [$subjectName, $subjectCode];
-};
-
-$buildSubjectLabel = function (array $row, string $fallbackLabel) use ($buildSubjectParts, $roleCategory) {
-    [$subjectName, $subjectCode] = $buildSubjectParts($row);
-
-    if ($subjectName === '' && $subjectCode === '') {
-        return $fallbackLabel;
+    $query = [
+        'q' => '/modules/Markbook/markbook_view.php',
+    ];
+    if ($childPersonID !== '') {
+        $query['search'] = $childPersonID;
     }
 
-    if ($roleCategory === 'Staff') {
-        return $subjectCode !== '' ? $subjectCode : $subjectName;
-    }
-
-    return $subjectName !== '' ? $subjectName : $subjectCode;
-};
-
-$buildStaffTitle = function (array $row, string $itemTitle, string $yearGroupsText) use ($buildSubjectParts, $staffEventFormat) {
-    [$subjectName, $subjectCode] = $buildSubjectParts($row);
-
-    if ($staffEventFormat === 'subjectCodeTitle') {
-        $prefix = $subjectName !== '' ? $subjectName : $subjectCode;
-        if ($subjectCode !== '' && $subjectName !== '' && $subjectCode !== $subjectName) {
-            $prefix .= ' ('.$subjectCode.')';
-        }
-
-        return $itemTitle !== '' && mb_strtolower($itemTitle) !== mb_strtolower($prefix)
-            ? $prefix.' - '.$itemTitle
-            : $prefix;
-    }
-
-    $prefix = $subjectCode !== '' ? $subjectCode : $subjectName;
-    if ($staffEventFormat === 'yearGroupCodeTitle' && $yearGroupsText !== '') {
-        $prefix = '('.$yearGroupsText.') '.$prefix;
-    }
-
-    return $itemTitle !== '' && mb_strtolower($itemTitle) !== mb_strtolower($prefix)
-        ? $prefix.' - '.$itemTitle
-        : $prefix;
+    return $absoluteURL.'/index.php?'.http_build_query($query);
 };
 
 foreach ($homeworkRows as $row) {
@@ -170,25 +128,13 @@ foreach ($homeworkRows as $row) {
         $homeworkTitle = trim((string) ($row['homeworkName'] ?? __('Homework')));
     }
 
-    $subject = $buildSubjectLabel($row, __('Homework'));
-
-    $yearGroupsText = '';
-    if ($roleCategory === 'Staff') {
-        $prefixes = [];
-        $yearGroupIDList = array_filter(array_map('trim', explode(',', (string) ($row['gibbonYearGroupIDList'] ?? ''))));
-        foreach ($yearGroupIDList as $groupID) {
-            if (isset($yearGroupMap[$groupID])) {
-                $prefixes[] = $yearGroupMap[$groupID];
-            }
-        }
-
-        if (!empty($prefixes)) {
-            $yearGroupsText = implode('/', $prefixes);
-        }
-    }
+    $subject = ac_getSubjectLabel($row, __('Homework'), $roleCategory);
+    $yearGroupsText = $roleCategory === 'Staff'
+        ? ac_buildYearGroupsText((string) ($row['gibbonYearGroupIDList'] ?? ''), $yearGroupMap)
+        : '';
 
     $title = $roleCategory === 'Staff'
-        ? $buildStaffTitle($row, $homeworkTitle, $yearGroupsText)
+        ? ac_buildStaffEventTitle($row, $homeworkTitle, $yearGroupsText, $staffEventFormat)
         : $subject;
     if ($roleCategory !== 'Staff' && $homeworkTitle !== '' && mb_strtolower($homeworkTitle) !== mb_strtolower($subject)) {
         $title .= ' - '.$homeworkTitle;
@@ -237,6 +183,7 @@ foreach ($homeworkRows as $row) {
     ];
 }
 
+$assessmentEvents = [];
 foreach ($assessmentRows as $row) {
     $type = trim((string) ($row['assessmentType'] ?? ''));
     if ($type === '') {
@@ -262,34 +209,31 @@ foreach ($assessmentRows as $row) {
         $assessmentTitle = __('Assessment');
     }
 
-    $subject = $buildSubjectLabel($row, __('Assessment'));
+    $subject = ac_getAssessmentDisplayValue($row, $assessmentDisplayBasis, __('Assessment'));
 
-    $yearGroupsText = '';
-    if ($roleCategory === 'Staff') {
-        $prefixes = [];
-        $yearGroupIDList = array_filter(array_map('trim', explode(',', (string) ($row['gibbonYearGroupIDList'] ?? ''))));
-        foreach ($yearGroupIDList as $groupID) {
-            if (isset($yearGroupMap[$groupID])) {
-                $prefixes[] = $yearGroupMap[$groupID];
-            }
-        }
+    $yearGroupsText = $roleCategory === 'Staff'
+        ? ac_buildYearGroupsText((string) ($row['gibbonYearGroupIDList'] ?? ''), $yearGroupMap)
+        : '';
 
-        if (!empty($prefixes)) {
-            $yearGroupsText = implode('/', $prefixes);
-        }
+    $title = $subject;
+    if ($roleCategory === 'Staff' && $assessmentDisplayBasis === 'learningArea' && $yearGroupsText !== '') {
+        $title = '('.$yearGroupsText.') '.$subject;
     }
-
-    $title = $roleCategory === 'Staff'
-        ? $buildStaffTitle($row, $assessmentTitle, $yearGroupsText)
-        : $subject;
-    if ($roleCategory !== 'Staff' && $assessmentTitle !== '' && mb_strtolower($assessmentTitle) !== mb_strtolower($subject)) {
+    if ($assessmentTitle !== '' && mb_strtolower($assessmentTitle) !== mb_strtolower($subject)) {
         $title .= ' - '.$assessmentTitle;
     }
 
-    $color = ac_normalizeHexColor((string) ($row['assessmentColor'] ?? ''));
-    if ($color === null) {
-        $color = $customColors[$type] ?? ac_colorFromPalette($type);
-    }
+    $color = ac_resolveAssessmentEventColor(
+        (string) ($row['assessmentColor'] ?? ''),
+        $type,
+        $classification,
+        $customColors,
+        $assessmentClassificationStyles,
+        $useAssessmentClassificationColorInCalendar
+    );
+    $borderColor = $useAssessmentClassificationColorInCalendar
+        ? ac_resolveAssessmentClassificationBorderColor($classification, $assessmentClassificationStyles)
+        : null;
 
     $classificationClass = 'ac-event-assessment-none';
     if ($classification === 'formative') {
@@ -313,13 +257,30 @@ foreach ($assessmentRows as $row) {
     } elseif ($roleCategory === 'Student' && $canViewMarkbook) {
         $url = $absoluteURL.'/index.php?q='.rawurlencode('/modules/Markbook/markbook_view.php');
     } elseif ($roleCategory === 'Parent' && $canViewMarkbook) {
-        $query = [
-            'q' => '/modules/Markbook/markbook_view.php',
-        ];
-        if ($childPersonID !== '') {
-            $query['search'] = $childPersonID;
-        }
-        $url = $absoluteURL.'/index.php?'.http_build_query($query);
+        $url = $buildParentMarkbookViewURL();
+    }
+
+    $tooltipLines = [];
+    $tooltipLines[] = $assessmentTitle;
+    $courseShortCode = trim((string) ($row['courseNameShort'] ?? ''));
+    $classShortCode = trim((string) ($row['classNameShort'] ?? ''));
+    $classLabel = '';
+    if ($courseShortCode !== '' && $classShortCode !== '') {
+        $classLabel = $courseShortCode.'.'.$classShortCode;
+    } elseif ($courseShortCode !== '' || $classShortCode !== '') {
+        $classLabel = trim($courseShortCode.$classShortCode);
+    } else {
+        $classLabel = trim((string) ($row['className'] ?? ''));
+    }
+    if ($classLabel !== '') {
+        $tooltipLines[] = __('Class').': '.$classLabel;
+    }
+    if ($type !== '') {
+        $tooltipLines[] = __('Type').': '.$type;
+    }
+    $description = trim((string) ($row['assessmentDescription'] ?? ''));
+    if ($description !== '') {
+        $tooltipLines[] = __('Details').': '.$description;
     }
 
     $event = [
@@ -327,8 +288,13 @@ foreach ($assessmentRows as $row) {
         'title' => $title,
         'start' => date('Y-m-d', strtotime((string) $row['assessmentDate'])),
         'allDay' => true,
-        'classNames' => ['ac-event-assessment', $classificationClass],
+        'classNames' => array_values(array_filter([
+            'ac-event-assessment',
+            $classificationClass,
+            $useAssessmentClassificationColorInCalendar ? 'ac-event-assessment-classification-color' : '',
+        ])),
         'backgroundColor' => $color,
+        'borderColor' => $borderColor,
         'textColor' => ac_getContrastingTextColor($color),
         'extendedProps' => [
             'subject' => $subject,
@@ -337,7 +303,8 @@ foreach ($assessmentRows as $row) {
             'type' => $type,
             'classification' => $classification,
             'source' => 'Markbook',
-            'description' => trim((string) ($row['assessmentDescription'] ?? '')),
+            'description' => $description,
+            'tooltipLines' => $tooltipLines,
         ],
     ];
 
@@ -345,7 +312,63 @@ foreach ($assessmentRows as $row) {
         $event['url'] = $url;
     }
 
-    $events[] = $event;
+    if (!$mergeSameDayAssessments) {
+        $assessmentEvents[] = $event;
+        continue;
+    }
+
+    $mergeKey = implode('|', [
+        date('Y-m-d', strtotime((string) $row['assessmentDate'])),
+        $subject,
+        mb_strtolower($assessmentTitle),
+        $classification,
+        $roleCategory === 'Staff' ? $yearGroupsText : '',
+    ]);
+
+    if (!isset($assessmentEvents[$mergeKey])) {
+        $event['extendedProps']['mergedCount'] = 1;
+        $event['extendedProps']['mergedTitles'] = [$assessmentTitle];
+        $event['extendedProps']['mergedColumnIDs'] = [(string) $row['gibbonMarkbookColumnID']];
+        $event['extendedProps']['mergedTooltipLines'] = [$tooltipLines];
+        $assessmentEvents[$mergeKey] = $event;
+        continue;
+    }
+
+    $assessmentEvents[$mergeKey]['extendedProps']['mergedCount']++;
+    $assessmentEvents[$mergeKey]['extendedProps']['mergedTitles'][] = $assessmentTitle;
+    $assessmentEvents[$mergeKey]['extendedProps']['mergedColumnIDs'][] = (string) $row['gibbonMarkbookColumnID'];
+    $assessmentEvents[$mergeKey]['extendedProps']['mergedTooltipLines'][] = $tooltipLines;
+
+    $mergedCount = (int) $assessmentEvents[$mergeKey]['extendedProps']['mergedCount'];
+    if ($roleCategory === 'Staff' && $assessmentDisplayBasis === 'learningArea') {
+        $assessmentEvents[$mergeKey]['title'] = ($yearGroupsText !== '' ? '('.$yearGroupsText.') ' : '').$subject;
+        if ($assessmentTitle !== '' && mb_strtolower($assessmentTitle) !== mb_strtolower($subject)) {
+            $assessmentEvents[$mergeKey]['title'] .= ' - '.$assessmentTitle;
+        }
+    } else {
+        $assessmentEvents[$mergeKey]['title'] = $subject.' x'.$mergedCount;
+    }
+
+    if ($roleCategory === 'Staff') {
+        if ($canViewMarkbook) {
+            $assessmentEvents[$mergeKey]['url'] = $absoluteURL.'/index.php?q='.rawurlencode('/modules/Markbook/markbook_view.php');
+        } else {
+            unset($assessmentEvents[$mergeKey]['url']);
+        }
+    } elseif ($roleCategory === 'Student' && $canViewMarkbook) {
+        $assessmentEvents[$mergeKey]['url'] = $absoluteURL.'/index.php?q='.rawurlencode('/modules/Markbook/markbook_view.php');
+    } elseif ($roleCategory === 'Parent') {
+        $parentURL = $buildParentMarkbookViewURL();
+        if ($parentURL !== null) {
+            $assessmentEvents[$mergeKey]['url'] = $parentURL;
+        } else {
+            unset($assessmentEvents[$mergeKey]['url']);
+        }
+    } else {
+        unset($assessmentEvents[$mergeKey]['url']);
+    }
 }
+
+$events = array_merge($events, array_values($assessmentEvents));
 
 echo json_encode($events);

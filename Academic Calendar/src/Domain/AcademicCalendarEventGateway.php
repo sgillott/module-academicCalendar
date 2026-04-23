@@ -174,9 +174,6 @@ class AcademicCalendarEventGateway extends QueryableGateway
     /**
      * Select markbook assessment events visible to a student.
      *
-     * Assessment rows are sourced from gibbonMarkbookColumn and intentionally
-     * exclude planner-linked rows to avoid duplicate calendar events.
-     *
      * @param string $gibbonSchoolYearID Active school year ID.
      * @param string $gibbonPersonID Student person ID.
      * @param string $dateStart Inclusive datetime lower bound (`Y-m-d H:i:s`).
@@ -202,8 +199,7 @@ class AcademicCalendarEventGateway extends QueryableGateway
                 ON ccp.gibbonCourseClassID = cc.gibbonCourseClassID
                AND ccp.gibbonPersonID = :gibbonPersonID
                AND ccp.role = 'Student'
-            WHERE mc.gibbonPlannerEntryID IS NULL
-              AND c.gibbonSchoolYearID = :gibbonSchoolYearID
+            WHERE c.gibbonSchoolYearID = :gibbonSchoolYearID
               AND mc.viewableStudents = 'Y'
               AND mc.date IS NOT NULL
               AND mc.date >= :dateStart
@@ -249,8 +245,7 @@ class AcademicCalendarEventGateway extends QueryableGateway
             INNER JOIN gibbonFamilyAdult fa ON fa.gibbonFamilyID = fc.gibbonFamilyID
                AND fa.gibbonPersonID = :parentPersonID
                AND fa.childDataAccess = 'Y'
-            WHERE mc.gibbonPlannerEntryID IS NULL
-              AND c.gibbonSchoolYearID = :gibbonSchoolYearID
+            WHERE c.gibbonSchoolYearID = :gibbonSchoolYearID
               AND mc.viewableParents = 'Y'
               AND mc.date IS NOT NULL
               AND mc.date >= :dateStart
@@ -290,8 +285,7 @@ class AcademicCalendarEventGateway extends QueryableGateway
         }
 
         $sql = $this->baseAssessmentSql()."
-            WHERE mc.gibbonPlannerEntryID IS NULL
-              AND c.gibbonSchoolYearID = :gibbonSchoolYearID
+            WHERE c.gibbonSchoolYearID = :gibbonSchoolYearID
               AND mc.date IS NOT NULL
               AND mc.date >= :dateStart
               AND mc.date < :dateEnd
@@ -365,11 +359,13 @@ class AcademicCalendarEventGateway extends QueryableGateway
                 c.gibbonYearGroupIDList,
                 c.name AS courseName,
                 c.nameShort AS courseNameShort,
+                d.name AS learningArea,
                 cc.name AS className,
                 cc.nameShort AS classNameShort
             FROM gibbonMarkbookColumn mc
             INNER JOIN gibbonCourseClass cc ON cc.gibbonCourseClassID = mc.gibbonCourseClassID
             INNER JOIN gibbonCourse c ON c.gibbonCourseID = cc.gibbonCourseID
+            LEFT JOIN gibbonDepartment d ON d.gibbonDepartmentID = c.gibbonDepartmentID
         ";
     }
 }

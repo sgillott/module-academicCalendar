@@ -295,6 +295,397 @@ function ac_getAvailableAssessmentClassifications(array $meta, bool $visibleOnly
 }
 
 /**
+ * Mix a hex color with white by a given ratio.
+ *
+ * @param string $color Hex color.
+ * @param float $whiteRatio Ratio of white to mix in, from 0 to 1.
+ *
+ * @return string Mixed hex color.
+ */
+function ac_mixHexWithWhite(string $color, float $whiteRatio): string
+{
+    $normalized = ac_normalizeHexColor($color);
+    if ($normalized === null) {
+        return '#FFFFFF';
+    }
+
+    $whiteRatio = max(0.0, min(1.0, $whiteRatio));
+    $baseRatio = 1 - $whiteRatio;
+
+    $r = (int) round((hexdec(substr($normalized, 1, 2)) * $baseRatio) + (255 * $whiteRatio));
+    $g = (int) round((hexdec(substr($normalized, 3, 2)) * $baseRatio) + (255 * $whiteRatio));
+    $b = (int) round((hexdec(substr($normalized, 5, 2)) * $baseRatio) + (255 * $whiteRatio));
+
+    return sprintf('#%02X%02X%02X', $r, $g, $b);
+}
+
+/**
+ * Get default assessment classification border colors.
+ *
+ * @return array{formative:string,summative:string,none:string}
+ */
+function ac_getDefaultAssessmentClassificationColors(): array
+{
+    return [
+        'formative' => '#F97316',
+        'summative' => '#1D4ED8',
+        'none' => '#9CA3AF',
+    ];
+}
+
+/**
+ * Decode assessment classification color JSON.
+ *
+ * @param string|null $json Stored JSON map.
+ *
+ * @return array{formative:string,summative:string,none:string}
+ */
+function ac_decodeAssessmentClassificationColors(?string $json): array
+{
+    $defaults = ac_getDefaultAssessmentClassificationColors();
+    if (empty($json)) {
+        return $defaults;
+    }
+
+    $decoded = json_decode($json, true);
+    if (!is_array($decoded)) {
+        return $defaults;
+    }
+
+    foreach (array_keys($defaults) as $key) {
+        $color = ac_normalizeHexColor((string) ($decoded[$key] ?? ''));
+        if ($color !== null) {
+            $defaults[$key] = $color;
+        }
+    }
+
+    return $defaults;
+}
+
+/**
+ * Retrieve assessment classification border colors from settings.
+ *
+ * @param SettingGateway $settingGateway Core setting gateway service.
+ *
+ * @return array{formative:string,summative:string,none:string}
+ */
+function ac_getAssessmentClassificationColors(SettingGateway $settingGateway): array
+{
+    $value = $settingGateway->getSettingByScope('Academic Calendar', 'assessmentClassificationColors');
+
+    return ac_decodeAssessmentClassificationColors($value ?: '');
+}
+
+/**
+ * Get whether the calendar should use assessment classification colours.
+ */
+function ac_getUseAssessmentClassificationColorInCalendar(SettingGateway $settingGateway): bool
+{
+    $value = $settingGateway->getSettingByScope('Academic Calendar', 'useAssessmentClassificationColorInCalendar');
+
+    return ac_normalizeYesNo($value ?: 'N') === 'Y';
+}
+
+/**
+ * Build assessment classification styles from configured border colors.
+ *
+ * @param array{formative:string,summative:string,none:string} $colors Border colors.
+ *
+ * @return array<string, array{border:string,highlight:string}>
+ */
+function ac_buildAssessmentClassificationStyles(array $colors): array
+{
+    return [
+        'formative' => [
+            'border' => $colors['formative'],
+            'highlight' => ac_mixHexWithWhite($colors['formative'], 0.92),
+        ],
+        'summative' => [
+            'border' => $colors['summative'],
+            'highlight' => ac_mixHexWithWhite($colors['summative'], 0.92),
+        ],
+        'none' => [
+            'border' => $colors['none'],
+            'highlight' => ac_mixHexWithWhite($colors['none'], 0.96),
+        ],
+    ];
+}
+
+/**
+ * Resolve the background colour for a markbook assessment event.
+ *
+ * Markbook column colours always win. After that, the module can prefer
+ * either event type colours or assessment classification colours.
+ */
+function ac_resolveAssessmentEventColor(
+    ?string $assessmentColor,
+    string $type,
+    string $classification,
+    array $eventTypeColors,
+    array $classificationStyles,
+    bool $useClassificationColor = false
+): string {
+    $classificationKey = in_array($classification, ['formative', 'summative'], true) ? $classification : 'none';
+    $classificationColor = ac_normalizeHexColor((string) ($classificationStyles[$classificationKey]['highlight'] ?? ''));
+    $directColor = ac_normalizeHexColor((string) $assessmentColor);
+
+    if ($useClassificationColor) {
+        return $classificationColor ?? $directColor ?? ac_colorFromPalette($type);
+    }
+
+    if ($directColor !== null) {
+        return $directColor;
+    }
+
+    $eventTypeColor = ac_normalizeHexColor((string) ($eventTypeColors[$type] ?? ''));
+    if ($eventTypeColor === null) {
+        $eventTypeColor = ac_colorFromPalette($type);
+    }
+
+    return $eventTypeColor ?? $classificationColor ?? ac_colorFromPalette($type);
+}
+
+/**
+ * Resolve the border colour for a markbook assessment event when classification
+ * colours are enabled in the calendar.
+ */
+function ac_resolveAssessmentClassificationBorderColor(
+    string $classification,
+    array $classificationStyles
+): ?string {
+    $classificationKey = in_array($classification, ['formative', 'summative'], true) ? $classification : 'none';
+
+    return ac_normalizeHexColor((string) ($classificationStyles[$classificationKey]['border'] ?? ''));
+}
+
+/**
+ * Normalize the assessment display basis setting.
+ *
+ * @param string|null $value Raw setting value.
+ *
+ * @return string Normalized basis key.
+ */
+function ac_normalizeAssessmentDisplayBasis(?string $value): string
+{
+    $value = trim((string) $value);
+    $allowed = [
+        'classCode',
+        'courseShortName',
+        'courseName',
+        'learningArea',
+    ];
+
+    return in_array($value, $allowed, true) ? $value : 'courseShortName';
+}
+
+/**
+ * Retrieve the configured assessment display basis.
+ *
+ * @param SettingGateway $settingGateway Core setting gateway service.
+ *
+ * @return string Normalized basis key.
+ */
+function ac_getAssessmentDisplayBasis(SettingGateway $settingGateway): string
+{
+    $value = $settingGateway->getSettingByScope('Academic Calendar', 'assessmentDisplayBasis');
+
+    return ac_normalizeAssessmentDisplayBasis($value ?: '');
+}
+
+/**
+ * Normalize merge-same-day-assessments setting.
+ *
+ * @param string|null $value Raw setting value.
+ *
+ * @return string `Y` or `N`.
+ */
+function ac_normalizeYesNo(?string $value): string
+{
+    return strtoupper(trim((string) $value)) === 'N' ? 'N' : 'Y';
+}
+
+/**
+ * Determine whether same-day assessments with the same display value should merge.
+ *
+ * @param SettingGateway $settingGateway Core setting gateway service.
+ *
+ * @return bool
+ */
+function ac_getMergeSameDayAssessments(SettingGateway $settingGateway): bool
+{
+    $value = $settingGateway->getSettingByScope('Academic Calendar', 'mergeSameDayAssessments');
+
+    return ac_normalizeYesNo($value ?: 'N') === 'Y';
+}
+
+/**
+ * Build the available assessment label values from a row.
+ *
+ * @param array<string, mixed> $row Assessment row data.
+ *
+ * @return array{classCode:string,courseShortName:string,courseName:string,learningArea:string}
+ */
+function ac_getAssessmentDisplayOptions(array $row): array
+{
+    $courseShortName = trim((string) ($row['courseNameShort'] ?? ''));
+    $courseName = trim((string) ($row['courseName'] ?? ''));
+    $classShortName = trim((string) ($row['classNameShort'] ?? ''));
+    $learningArea = trim((string) ($row['learningArea'] ?? ''));
+
+    $classCode = '';
+    if ($courseShortName !== '' && $classShortName !== '') {
+        $classCode = $courseShortName.'.'.$classShortName;
+    } elseif ($courseShortName !== '' || $classShortName !== '') {
+        $classCode = trim($courseShortName.$classShortName);
+    }
+
+    return [
+        'classCode' => $classCode,
+        'courseShortName' => $courseShortName,
+        'courseName' => $courseName,
+        'learningArea' => $learningArea,
+    ];
+}
+
+/**
+ * Resolve an assessment display value from the configured basis.
+ *
+ * @param array<string, mixed> $row Assessment row data.
+ * @param string $basis Display basis.
+ * @param string $fallbackLabel Fallback label.
+ *
+ * @return string
+ */
+function ac_getAssessmentDisplayValue(array $row, string $basis, string $fallbackLabel): string
+{
+    $basis = ac_normalizeAssessmentDisplayBasis($basis);
+    $options = ac_getAssessmentDisplayOptions($row);
+
+    if (!empty($options[$basis])) {
+        return (string) $options[$basis];
+    }
+
+    foreach (['learningArea', 'courseShortName', 'courseName', 'classCode'] as $fallbackBasis) {
+        if (!empty($options[$fallbackBasis])) {
+            return (string) $options[$fallbackBasis];
+        }
+    }
+
+    return $fallbackLabel;
+}
+
+/**
+ * Build the subject name and class-code parts for a planner or assessment row.
+ *
+ * @param array<string, mixed> $row Source row containing course/class fields.
+ *
+ * @return array{0:string,1:string} Subject name and subject code.
+ */
+function ac_getSubjectParts(array $row): array
+{
+    $courseName = trim((string) ($row['courseName'] ?? ''));
+    $courseShort = trim((string) ($row['courseNameShort'] ?? ''));
+    $classShort = trim((string) ($row['classNameShort'] ?? ''));
+
+    $subjectName = $courseName !== '' ? $courseName : '';
+    $subjectCode = '';
+    if ($courseShort !== '' && $classShort !== '') {
+        $subjectCode = $courseShort.'.'.$classShort;
+    } else {
+        $subjectCode = trim($courseShort.$classShort);
+    }
+
+    if ($subjectName === '') {
+        $subjectName = $subjectCode;
+    }
+    if ($subjectCode === '') {
+        $subjectCode = $subjectName;
+    }
+
+    return [$subjectName, $subjectCode];
+}
+
+/**
+ * Resolve the standard subject label for homework events by role.
+ *
+ * @param array<string, mixed> $row Source row containing course/class fields.
+ * @param string $fallbackLabel Label to use when no subject data is available.
+ * @param string $roleCategory Current role category.
+ *
+ * @return string
+ */
+function ac_getSubjectLabel(array $row, string $fallbackLabel, string $roleCategory = 'Student'): string
+{
+    [$subjectName, $subjectCode] = ac_getSubjectParts($row);
+
+    if ($subjectName === '' && $subjectCode === '') {
+        return $fallbackLabel;
+    }
+
+    if ($roleCategory === 'Staff') {
+        return $subjectCode !== '' ? $subjectCode : $subjectName;
+    }
+
+    return $subjectName !== '' ? $subjectName : $subjectCode;
+}
+
+/**
+ * Convert a course year-group ID list into a slash-separated text prefix.
+ *
+ * @param string $yearGroupIDList CSV list of year-group IDs.
+ * @param array<string, string> $yearGroupMap Lookup of year-group ID => label.
+ *
+ * @return string
+ */
+function ac_buildYearGroupsText(string $yearGroupIDList, array $yearGroupMap): string
+{
+    $prefixes = [];
+    $yearGroupIDs = array_filter(array_map('trim', explode(',', $yearGroupIDList)));
+    foreach ($yearGroupIDs as $groupID) {
+        if (isset($yearGroupMap[$groupID])) {
+            $prefixes[] = $yearGroupMap[$groupID];
+        }
+    }
+
+    return !empty($prefixes) ? implode('/', $prefixes) : '';
+}
+
+/**
+ * Build the staff-facing homework or assessment label.
+ *
+ * @param array<string, mixed> $row Source row containing course/class fields.
+ * @param string $itemTitle Homework or assessment title.
+ * @param string $yearGroupsText Rendered year-group prefix text.
+ * @param string $staffEventFormat Normalized staff event format setting.
+ *
+ * @return string
+ */
+function ac_buildStaffEventTitle(array $row, string $itemTitle, string $yearGroupsText, string $staffEventFormat): string
+{
+    [$subjectName, $subjectCode] = ac_getSubjectParts($row);
+
+    if ($staffEventFormat === 'subjectCodeTitle') {
+        $prefix = $subjectName !== '' ? $subjectName : $subjectCode;
+        if ($subjectCode !== '' && $subjectName !== '' && $subjectCode !== $subjectName) {
+            $prefix .= ' ('.$subjectCode.')';
+        }
+
+        return $itemTitle !== '' && mb_strtolower($itemTitle) !== mb_strtolower($prefix)
+            ? $prefix.' - '.$itemTitle
+            : $prefix;
+    }
+
+    $prefix = $subjectCode !== '' ? $subjectCode : $subjectName;
+    if ($staffEventFormat === 'yearGroupCodeTitle' && $yearGroupsText !== '') {
+        $prefix = '('.$yearGroupsText.') '.$prefix;
+    }
+
+    return $itemTitle !== '' && mb_strtolower($itemTitle) !== mb_strtolower($prefix)
+        ? $prefix.' - '.$itemTitle
+        : $prefix;
+}
+
+/**
  * Pick a deterministic fallback color for an event key.
  *
  * Uses a stable hash so each key always maps to the same color

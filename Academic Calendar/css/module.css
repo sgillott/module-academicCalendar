@@ -24,18 +24,43 @@
     font-style: italic !important;
 }
 
-#academicCalendar .fc .ac-event-assessment.fc-daygrid-block-event,
-#academicCalendar .fc .ac-event-assessment.fc-daygrid-dot-event {
+#academicCalendar .fc .ac-event-assessment:not(.ac-event-assessment-classification-color).fc-daygrid-block-event,
+#academicCalendar .fc .ac-event-assessment:not(.ac-event-assessment-classification-color).fc-daygrid-dot-event {
     border: 0 !important;
     border-style: none !important;
     border-width: 0 !important;
     box-shadow: none !important;
 }
 
-#academicCalendar .fc .ac-event-assessment {
+#academicCalendar .fc .ac-event-assessment:not(.ac-event-assessment-classification-color) {
     border: 0 !important;
     border-style: none !important;
     border-width: 0 !important;
+}
+
+#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color,
+#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.fc-daygrid-block-event,
+#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.fc-daygrid-dot-event {
+    border-style: solid !important;
+    border-width: 2px !important;
+}
+
+#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-formative,
+#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-formative.fc-daygrid-block-event,
+#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-formative.fc-daygrid-dot-event {
+    border-color: var(--acClassificationFormativeBorder, #f97316) !important;
+}
+
+#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-summative,
+#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-summative.fc-daygrid-block-event,
+#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-summative.fc-daygrid-dot-event {
+    border-color: var(--acClassificationSummativeBorder, #1d4ed8) !important;
+}
+
+#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-none,
+#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-none.fc-daygrid-block-event,
+#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-none.fc-daygrid-dot-event {
+    border-color: var(--acClassificationNoneBorder, #9ca3af) !important;
 }
 
 #academicCalendar .fc .ac-event-homework .fc-event-title {
@@ -111,29 +136,29 @@ input.acEventTypeVisible[type="checkbox"] {
 }
 
 #acEventTypesTable tr.acClassificationNone td {
-    background-color: #fafafa;
+    background-color: var(--acClassificationNoneHighlight, #fafafa);
 }
 
 #acEventTypesTable tr.acClassificationFormative td {
-    background-color: #fff7ed;
+    background-color: var(--acClassificationFormativeHighlight, #fff7ed);
 }
 
 #acEventTypesTable tr.acClassificationSummative td {
-    background-color: #eff6ff;
+    background-color: var(--acClassificationSummativeHighlight, #eff6ff);
 }
 
 #acEventTypesTable tr.acClassificationNone select[name^="typeClassification["] {
-    border-color: #9ca3af;
+    border-color: var(--acClassificationNoneBorder, #9ca3af);
     border-width: 2px;
 }
 
 #acEventTypesTable tr.acClassificationFormative select[name^="typeClassification["] {
-    border-color: #f97316;
+    border-color: var(--acClassificationFormativeBorder, #f97316);
     border-width: 2px;
 }
 
 #acEventTypesTable tr.acClassificationSummative select[name^="typeClassification["] {
-    border-color: #1d4ed8;
+    border-color: var(--acClassificationSummativeBorder, #1d4ed8);
     border-width: 2px;
 }
 
@@ -174,15 +199,15 @@ input.acEventTypeVisible[type="checkbox"] {
 }
 
 .acAssessmentFilterCheckboxFormative {
-    outline: 2px solid #f97316;
+    outline: 2px solid var(--acClassificationFormativeBorder, #f97316);
 }
 
 .acAssessmentFilterCheckboxSummative {
-    outline: 2px solid #1d4ed8;
+    outline: 2px solid var(--acClassificationSummativeBorder, #1d4ed8);
 }
 
 .acAssessmentFilterCheckboxNone {
-    outline: 2px solid #9ca3af;
+    outline: 2px solid var(--acClassificationNoneBorder, #9ca3af);
 }
 
 #academicCalendar .fc .fc-daygrid-day-top {

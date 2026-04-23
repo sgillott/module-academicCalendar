@@ -16,7 +16,7 @@ $description = 'Homework calendar for students, parents and staff.';
 $entryURL    = 'calendar_view.php';
 $type        = 'Additional';
 $category    = 'Learn';
-$version     = '0.5.04';
+$version     = '0.6.00';
 $author      = 'Steve Gillott';
 $url         = '';
 
@@ -32,11 +32,15 @@ $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `na
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'eventTypeMeta', 'Event Type Meta', 'JSON map of event type visibility and classification metadata.', '{}');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'defaultAssessmentFilter', 'Default Assessment Filter', 'Default user filter for formative and summative assessment events.', '{\"formative\":\"Y\",\"summative\":\"Y\",\"none\":\"Y\"}');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'defaultStaffView', 'Default Staff View', 'Default filter for staff in Homework Calendar.', 'all');";
-$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'staffEventFormat', 'Staff Event Format', 'Choose how staff homework and assessment labels are shown in the calendar.', 'codeTitle');";
+$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'staffEventFormat', 'Homework Format in Staff Calendar', 'Choose how homework titles appear for staff in the calendar. This controls how course, class code, year group, and title are combined.', 'codeTitle');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'gibbonYearGroupIDList', 'Year Groups', 'Academic Calendar is enabled for these year groups.', '');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'summativeWeeklyThresholdDefault', 'Default Summative Weekly Threshold', 'Fallback threshold used when a year group does not have its own setting.', '3');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'summativeWeeklyThresholdByYearGroup', 'Summative Weekly Threshold by Year Group', 'JSON map of gibbonYearGroupID to weekly threshold.', '{}');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'overviewWeekNumberMode', 'Overview Week Number Mode', 'Choose whether the summative overview shows calendar weeks or academic weeks.', 'academic');";
+$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'assessmentDisplayBasis', 'Assessment Format in Staff Calendar', 'Choose which course field is used when naming assessment events for staff. This also controls how same-day assessment merges are labelled.', 'courseShortName');";
+$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'mergeSameDayAssessments', 'Merge Same-Day Assessments', 'Merge assessment rows that share the same display value on the same day.', 'N');";
+$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'assessmentClassificationColors', 'Assessment Classification Colours', 'JSON map of formative, summative, and not classified colours.', '{\"formative\":\"#F97316\",\"summative\":\"#1D4ED8\",\"none\":\"#9CA3AF\"}');";
+$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID`, `scope`, `name`, `nameDisplay`, `description`, `value`) VALUES (NULL, 'Academic Calendar', 'useAssessmentClassificationColorInCalendar', 'Use Assessment Classification Colour in Calendar', 'When enabled, assessment events on the Homework/Assessment Calendar use the formative, summative, or not classified colours.', 'N');";
 
 // Action definitions
 $actionRows = [];

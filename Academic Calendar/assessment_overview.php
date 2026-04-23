@@ -31,8 +31,10 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
     $defaultThreshold = ac_getSummativeThresholdDefault($settingGateway);
     $thresholdByYearGroup = ac_getSummativeThresholdByYearGroup($settingGateway);
     $overviewWeekNumberMode = ac_getOverviewWeekNumberMode($settingGateway);
+    $assessmentDisplayBasis = ac_getAssessmentDisplayBasis($settingGateway);
     $eventTypeMeta = ac_getEventTypeMeta($settingGateway);
     $eventTypeColors = ac_getColorMap($settingGateway);
+    $assessmentClassificationStyles = ac_buildAssessmentClassificationStyles(ac_getAssessmentClassificationColors($settingGateway));
 
     $schoolYear = $schoolYearGateway->getSchoolYearByID((int) $gibbonSchoolYearID);
     if (empty($schoolYear['firstDay']) || empty($schoolYear['lastDay'])) {
@@ -211,13 +213,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
             continue;
         }
 
-        $subject = trim((string) ($assessmentRow['courseNameShort'] ?? ''));
-        if ($subject === '') {
-            $subject = trim((string) ($assessmentRow['courseName'] ?? ''));
-        }
-        if ($subject === '') {
-            $subject = __('Assessment');
-        }
+        $subject = ac_getAssessmentDisplayValue($assessmentRow, $assessmentDisplayBasis, __('Assessment'));
 
         foreach ($matchingYearGroupIDs as $yearGroupID) {
             if (!isset($weeklySubjects[$weekKey][$yearGroupID][$subject])) {
@@ -247,10 +243,14 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
 
             $weeklySubjectDetails[$weekKey][$yearGroupID][$subject][] = $detailLine;
 
-            $subjectColor = ac_normalizeHexColor((string) ($assessmentRow['assessmentColor'] ?? ''));
-            if ($subjectColor === null && $assessmentType !== '') {
-                $subjectColor = ac_normalizeHexColor((string) ($eventTypeColors[$assessmentType] ?? ''));
-            }
+            $subjectColor = ac_resolveAssessmentEventColor(
+                (string) ($assessmentRow['assessmentColor'] ?? ''),
+                $assessmentType,
+                'summative',
+                $eventTypeColors,
+                $assessmentClassificationStyles,
+                false
+            );
             if ($subjectColor !== null) {
                 $weeklySubjectColors[$weekKey][$yearGroupID][$subject][$subjectColor] = (int) ($weeklySubjectColors[$weekKey][$yearGroupID][$subject][$subjectColor] ?? 0) + 1;
             }

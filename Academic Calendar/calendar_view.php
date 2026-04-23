@@ -43,6 +43,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
     $enabledYearGroupIDs = ac_getEnabledYearGroupIDs($settingGateway);
     $eventTypeMeta = ac_getEventTypeMeta($settingGateway);
     $defaultAssessmentFilter = ac_getDefaultAssessmentFilter($settingGateway);
+    $assessmentClassificationColors = ac_getAssessmentClassificationColors($settingGateway);
+    $assessmentClassificationStyles = ac_buildAssessmentClassificationStyles($assessmentClassificationColors);
     $availableAssessmentClassifications = ac_getAvailableAssessmentClassifications($eventTypeMeta, true);
     $showAssessmentFilterOptions = $showAssessmentEvents
         && ($availableAssessmentClassifications['formative'] || $availableAssessmentClassifications['summative'] || $availableAssessmentClassifications['none']);
@@ -235,6 +237,13 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
     }
 
     echo '<div id="academicCalendar"></div>';
+    echo '<style>
+        #academicCalendar {
+            --acClassificationNoneBorder: '.htmlspecialchars($assessmentClassificationStyles['none']['border']).';
+            --acClassificationFormativeBorder: '.htmlspecialchars($assessmentClassificationStyles['formative']['border']).';
+            --acClassificationSummativeBorder: '.htmlspecialchars($assessmentClassificationStyles['summative']['border']).';
+        }
+    </style>';
     ?>
     <script src="<?= $session->get('absoluteURL'); ?>/lib/fullcalendar/dist/index.global.min.js"></script>
     <?= !empty($localeFile) ? '<script src="'.$localeFile.'"></script>' : '' ?>
@@ -410,9 +419,17 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                         eventDidMount: function (info) {
                             const props = info.event.extendedProps || {};
                             if (props.source === 'Markbook') {
-                                info.el.style.border = 'none';
-                                info.el.style.borderWidth = '0';
-                                info.el.style.boxShadow = 'none';
+                                const useClassificationBorder = info.el.classList.contains('ac-event-assessment-classification-color') && info.event.borderColor;
+                                if (useClassificationBorder) {
+                                    info.el.style.borderStyle = 'solid';
+                                    info.el.style.borderWidth = '2px';
+                                    info.el.style.borderColor = info.event.borderColor;
+                                    info.el.style.boxShadow = 'none';
+                                } else {
+                                    info.el.style.border = 'none';
+                                    info.el.style.borderWidth = '0';
+                                    info.el.style.boxShadow = 'none';
+                                }
 
                                 const main = info.el.querySelector('.fc-event-main');
                                 if (main) {
@@ -453,23 +470,39 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                                 hour12: false
                             }) : '';
 
-                            if (props.subject) {
-                                lines.push(props.subject);
-                            }
-                            if (props.homeworkTitle && props.homeworkTitle !== props.subject) {
-                                lines.push(props.homeworkTitle);
-                            }
-                            if (props.description) {
-                                lines.push(props.description);
-                            }
-                            if (props.yearGroups) {
-                                lines.push('<?= htmlspecialchars(__('Year Group'), ENT_QUOTES); ?>: ' + props.yearGroups);
-                            }
-                            if (props.type) {
-                                lines.push('<?= htmlspecialchars(__('Type'), ENT_QUOTES); ?>: ' + props.type);
-                            }
-                            if (props.classification) {
-                                lines.push('<?= htmlspecialchars(__('Assessment Classification'), ENT_QUOTES); ?>: ' + props.classification);
+                            if (props.source === 'Markbook' && Array.isArray(props.mergedTooltipLines) && props.mergedTooltipLines.length > 0) {
+                                props.mergedTooltipLines.forEach(function (groupLines) {
+                                    if (Array.isArray(groupLines)) {
+                                        groupLines.forEach(function (line) {
+                                            if (line) {
+                                                lines.push(line);
+                                            }
+                                        });
+                                        lines.push('');
+                                    }
+                                });
+                                if (lines.length > 0 && lines[lines.length - 1] === '') {
+                                    lines.pop();
+                                }
+                            } else {
+                                if (props.subject) {
+                                    lines.push(props.subject);
+                                }
+                                if (props.homeworkTitle && props.homeworkTitle !== props.subject) {
+                                    lines.push(props.homeworkTitle);
+                                }
+                                if (props.description) {
+                                    lines.push(props.description);
+                                }
+                                if (props.yearGroups) {
+                                    lines.push('<?= htmlspecialchars(__('Year Group'), ENT_QUOTES); ?>: ' + props.yearGroups);
+                                }
+                                if (props.type) {
+                                    lines.push('<?= htmlspecialchars(__('Type'), ENT_QUOTES); ?>: ' + props.type);
+                                }
+                                if (props.classification) {
+                                    lines.push('<?= htmlspecialchars(__('Assessment Classification'), ENT_QUOTES); ?>: ' + props.classification);
+                                }
                             }
                             if (due) {
                                 lines.push('<?= htmlspecialchars(__('Due'), ENT_QUOTES); ?>: ' + due);
