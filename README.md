@@ -283,7 +283,6 @@ Students and Parents also see homework and assessment titles built from the same
 ## Permissions and Actions
 
 <img width="50%" alt="User Permissions" src="https://github.com/user-attachments/assets/f0f1f0b9-7fa1-445e-999d-ae2a6653cc0a" />
-<img width="1307" height="644" alt="StaffDashboardHook" src="https://github.com/user-attachments/assets/32eea5b0-47fa-49f4-892a-87671713c47d" />
 
 The module includes these actions:
 
