@@ -1,4 +1,23 @@
 <?php
+/*
+Gibbon: the flexible, open school platform
+Founded by Ross Parker at ICHK Secondary. Built by Ross Parker, Sandra Kuipers and the Gibbon community (https://gibbonedu.org/about/)
+Copyright © 2010, Gibbon Foundation
+Gibbon™, Gibbon Education Ltd. (Hong Kong)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 
 use Gibbon\Domain\School\SchoolYearGateway;
 use Gibbon\Domain\School\SchoolYearSpecialDayGateway;
@@ -13,7 +32,7 @@ require_once __DIR__.'/moduleFunctions.php';
 if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessment_overview.php')) {
     $page->addError(__('You do not have access to this action.'));
 } else {
-    $page->breadcrumbs->add(__('Summative Assessment Overview'));
+    $page->breadcrumbs->add(__('Assessment Overview'));
 
     $gibbonSchoolYearID = (string) $session->get('gibbonSchoolYearID');
     $firstDayOfTheWeek = (string) $session->get('firstDayOfTheWeek', 'Monday');
@@ -32,7 +51,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
     $thresholdByYearGroup = ac_getSummativeThresholdByYearGroup($settingGateway);
     $overviewWeekNumberMode = ac_getOverviewWeekNumberMode($settingGateway);
     $assessmentDisplayBasis = ac_getAssessmentDisplayBasis($settingGateway);
+    $mergeSameDayAssessments = ac_getMergeSameDayAssessments($settingGateway);
     $eventTypeMeta = ac_getEventTypeMeta($settingGateway);
+    $assessmentClassificationDefinitions = ac_getAssessmentClassificationDefinitions($settingGateway);
     $eventTypeColors = ac_getColorMap($settingGateway);
     $assessmentClassificationStyles = ac_buildAssessmentClassificationStyles(ac_getAssessmentClassificationColors($settingGateway));
 
@@ -155,10 +176,22 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
         }));
     }
 
-    $summativeTypes = [];
+    $overviewClassificationKeys = [];
+    foreach ($assessmentClassificationDefinitions as $classificationKey => $definition) {
+        if ($classificationKey === 'none') {
+            continue;
+        }
+
+        if ((string) ($definition['displayInOverview'] ?? 'N') === 'Y') {
+            $overviewClassificationKeys[$classificationKey] = true;
+        }
+    }
+
+    $overviewTypes = [];
     foreach ($eventTypeMeta as $type => $meta) {
-        if (($meta['classification'] ?? '') === 'summative') {
-            $summativeTypes[(string) $type] = true;
+        $classification = ac_normalizeAssessmentClassificationKey((string) ($meta['classification'] ?? ''));
+        if ($classification !== '' && isset($overviewClassificationKeys[$classification])) {
+            $overviewTypes[(string) $type] = $classification;
         }
     }
 
@@ -167,7 +200,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
     $assessmentDateEndExclusive = $schoolYearEnd->modify('+1 day');
 
     $assessmentRows = [];
-    if (!empty($summativeTypes)) {
+    if (!empty($overviewTypes)) {
         $assessmentRows = $eventGateway->selectStaffAssessmentEvents(
             $gibbonSchoolYearID,
             $schoolYearStart->format('Y-m-d 00:00:00'),
@@ -186,7 +219,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
 
     foreach ($assessmentRows as $assessmentRow) {
         $type = trim((string) ($assessmentRow['assessmentType'] ?? ''));
-        if ($type === '' || !isset($summativeTypes[$type])) {
+        if ($type === '' || !isset($overviewTypes[$type])) {
             continue;
         }
 
@@ -218,16 +251,22 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
 
         foreach ($matchingYearGroupIDs as $yearGroupID) {
             $assessmentType = trim((string) ($assessmentRow['assessmentType'] ?? ''));
-            $classification = isset($summativeTypes[$assessmentType]) ? 'summative' : '';
+            $classification = (string) ($overviewTypes[$assessmentType] ?? '');
             $cellYearGroupsText = (string) ($yearGroupMap[$yearGroupID] ?? '');
             $mergeYearGroupsText = $roleCategory === 'Staff' ? $cellYearGroupsText : '';
-            $mergeKey = ac_buildAssessmentMergeKey(
-                $assessmentRow,
-                $subject,
-                $assessmentTitle,
-                $classification,
-                $mergeYearGroupsText
-            );
+            $mergeKey = $mergeSameDayAssessments
+                ? ac_buildAssessmentMergeKey(
+                    $assessmentRow,
+                    $subject,
+                    $assessmentTitle,
+                    $classification,
+                    $mergeYearGroupsText
+                )
+                : implode('|', [
+                    'assessment',
+                    (string) ($assessmentRow['gibbonMarkbookColumnID'] ?? ''),
+                    $yearGroupID,
+                ]);
 
             if (!isset($weeklyAssessmentGroups[$weekKey][$yearGroupID][$mergeKey])) {
                 $weeklyCounts[$weekKey][$yearGroupID] = (int) ($weeklyCounts[$weekKey][$yearGroupID] ?? 0) + 1;
@@ -252,7 +291,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
             $subjectColor = ac_resolveAssessmentEventColor(
                 (string) ($assessmentRow['assessmentColor'] ?? ''),
                 $assessmentType,
-                'summative',
+                $classification,
                 $eventTypeColors,
                 $assessmentClassificationStyles,
                 false
@@ -397,9 +436,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
     echo '</div>';
     echo '</details>';
 
-    if (empty($summativeTypes)) {
+    if (empty($overviewTypes)) {
         echo '<div class="warning">';
-        echo __('No markbook event types are currently classified as Summative in Manage Settings.');
+        echo __('No markbook event types are currently assigned to an assessment classification that is set to display in the overview.');
         echo '</div>';
     }
 
@@ -408,11 +447,25 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
             return;
         }
 
+        $yearGroupCount = max(1, count($displayYearGroups));
+        $weekColumnWidth = 5.0;
+        $weekBeginningWidth = 9.0;
+        $schoolEventsWidth = 20.0;
+        $yearGroupWidth = max(6.5, (100.0 - $weekColumnWidth - $weekBeginningWidth - $schoolEventsWidth) / $yearGroupCount);
+
         echo '<h3 class="acOverviewTermTitle">'.htmlspecialchars($heading).' <span>('.htmlspecialchars($dateRange).')</span></h3>';
         echo '<div class="overflow-x-auto">';
         echo '<table class="acOverviewTable">';
+        echo '<colgroup>';
+        echo '<col style="width: '.$weekColumnWidth.'%;">';
+        echo '<col style="width: '.$weekBeginningWidth.'%;">';
+        foreach ($displayYearGroups as $group) {
+            echo '<col style="width: '.$yearGroupWidth.'%;">';
+        }
+        echo '<col style="width: '.$schoolEventsWidth.'%;">';
+        echo '</colgroup>';
         echo '<thead><tr>';
-        echo '<th>'.__('Week').'</th>';
+        echo '<th class="acOverviewWeekColumn">'.__('Week').'</th>';
         echo '<th>'.__('Week Beginning').'</th>';
         foreach ($displayYearGroups as $group) {
             $yearGroupID = (string) $group['gibbonYearGroupID'];
@@ -420,7 +473,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
             $threshold = (int) ($thresholdByYearGroup[$yearGroupID] ?? $defaultThreshold);
             echo '<th>'.htmlspecialchars($label).' <span class="acOverviewThreshold">(MAX '.(int) $threshold.')</span></th>';
         }
-        echo '<th>'.__('School Events').'</th>';
+        echo '<th class="acOverviewSchoolEventsColumn">'.__('School Events').'</th>';
         echo '</tr></thead>';
         echo '<tbody>';
 
@@ -432,7 +485,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
                 : (string) (int) $week['calendarWeekNumber'];
 
             echo '<tr'.$rowClass.'>';
-            echo '<td class="acOverviewWeekNumber">'.$weekNumberDisplay.'</td>';
+            echo '<td class="acOverviewWeekNumber acOverviewWeekColumn">'.$weekNumberDisplay.'</td>';
             echo '<td>'.htmlspecialchars($week['weekStart']->format('j M')).'</td>';
 
             foreach ($displayYearGroups as $group) {
@@ -477,7 +530,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
                 echo '</td>';
             }
 
-            echo '<td>';
+            echo '<td class="acOverviewSchoolEventsColumn">';
             if (!empty($week['specialDays'])) {
                 echo htmlspecialchars(implode(', ', $week['specialDays']));
             } else {
@@ -523,4 +576,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/assessm
     if (!$renderedAny) {
         echo '<div class="warning">'.__('No weeks match the selected filters.').'</div>';
     }
+
+    echo '<script src="'.$session->get('absoluteURL').'/modules/'.rawurlencode($session->get('module')).'/js/module.js"></script>';
+    echo '<script>window.AcademicCalendarModule.initOverviewTooltips();</script>';
 }

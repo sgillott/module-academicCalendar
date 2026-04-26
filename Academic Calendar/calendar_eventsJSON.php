@@ -1,4 +1,23 @@
 <?php
+/*
+Gibbon: the flexible, open school platform
+Founded by Ross Parker at ICHK Secondary. Built by Ross Parker, Sandra Kuipers and the Gibbon community (https://gibbonedu.org/about/)
+Copyright © 2010, Gibbon Foundation
+Gibbon™, Gibbon Education Ltd. (Hong Kong)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 
 use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Domain\School\YearGroupGateway;
@@ -27,8 +46,13 @@ if (empty($dateStart) || empty($dateEnd)) {
     exit;
 }
 
-$dateStart = date('Y-m-d H:i:s', strtotime($dateStart));
-$dateEnd = date('Y-m-d H:i:s', strtotime($dateEnd));
+$dateStart = ac_parseCalendarFeedDate($dateStart);
+$dateEnd = ac_parseCalendarFeedDate($dateEnd);
+
+if ($dateStart === null || $dateEnd === null || $dateStart >= $dateEnd) {
+    echo json_encode([]);
+    exit;
+}
 
 $roleCategory = (string) $session->get('gibbonRoleIDCurrentCategory');
 $gibbonPersonID = (string) $session->get('gibbonPersonID');
@@ -42,21 +66,21 @@ $settingGateway = $container->get(SettingGateway::class);
 $yearGroupGateway = $container->get(YearGroupGateway::class);
 $customColors = ac_getColorMap($settingGateway);
 $eventTypeMeta = ac_getEventTypeMeta($settingGateway);
-$assessmentClassificationStyles = ac_buildAssessmentClassificationStyles(ac_getAssessmentClassificationColors($settingGateway));
+$assessmentClassificationDefinitions = ac_getAssessmentClassificationDefinitions($settingGateway);
+$assessmentClassificationStyles = ac_buildAssessmentClassificationStyles(array_map(function ($definition) {
+    return (string) $definition['color'];
+}, $assessmentClassificationDefinitions));
 $useAssessmentClassificationColorInCalendar = ac_getUseAssessmentClassificationColorInCalendar($settingGateway);
 $defaultAssessmentFilter = ac_getDefaultAssessmentFilter($settingGateway);
-$staffEventFormat = ac_getStaffEventFormat($settingGateway);
 $assessmentDisplayBasis = ac_getAssessmentDisplayBasis($settingGateway);
 $mergeSameDayAssessments = ac_getMergeSameDayAssessments($settingGateway);
 $enabledYearGroupIDs = ac_getEnabledYearGroupIDs($settingGateway);
 $showHomeworkEvents = ac_getShowHomeworkEvents($settingGateway);
 $showAssessmentEvents = ac_getShowAssessmentEvents($settingGateway);
-$assessmentFormative = strtoupper((string) ($_GET['assessmentFormative'] ?? $defaultAssessmentFilter['formative']));
-$assessmentSummative = strtoupper((string) ($_GET['assessmentSummative'] ?? $defaultAssessmentFilter['summative']));
-$assessmentNone = strtoupper((string) ($_GET['assessmentNone'] ?? $defaultAssessmentFilter['none']));
-$assessmentFormative = $assessmentFormative === 'N' ? 'N' : 'Y';
-$assessmentSummative = $assessmentSummative === 'N' ? 'N' : 'Y';
-$assessmentNone = $assessmentNone === 'N' ? 'N' : 'Y';
+$assessmentFilterSource = isset($_GET['assessmentFilter']) && is_array($_GET['assessmentFilter'])
+    ? $_GET['assessmentFilter']
+    : [];
+$assessmentFilterState = ac_normalizeAssessmentFilterState($assessmentClassificationDefinitions, $assessmentFilterSource, $defaultAssessmentFilter);
 $canViewMarkbook = isActionAccessible($guid, $connection2, '/modules/Markbook/markbook_view.php');
 $canEditMarkbookData = isActionAccessible($guid, $connection2, '/modules/Markbook/markbook_edit_data.php');
 
@@ -130,25 +154,19 @@ foreach ($homeworkRows as $row) {
         $homeworkTitle = trim((string) ($row['homeworkName'] ?? __('Homework')));
     }
 
-    $subject = ac_getSubjectLabel($row, __('Homework'), $roleCategory);
+    $subject = $roleCategory === 'Staff'
+        ? ac_getSubjectLabel($row, __('Homework'), $roleCategory)
+        : ac_getHomeworkDisplayValue($row, $assessmentDisplayBasis, __('Homework'));
+    $classLabel = ac_getAssessmentClassLabel($row);
     $yearGroupsText = $roleCategory === 'Staff'
         ? ac_buildYearGroupsText((string) ($row['gibbonYearGroupIDList'] ?? ''), $yearGroupMap)
         : '';
+    $tooltipLines = ac_buildHomeworkTooltipLines($row, $homeworkTitle, $type, $yearGroupsText);
 
-    $title = $roleCategory === 'Staff'
-        ? ac_buildStaffEventTitle($row, $homeworkTitle, $yearGroupsText, $staffEventFormat)
-        : $subject;
-    if ($roleCategory !== 'Staff' && $homeworkTitle !== '' && mb_strtolower($homeworkTitle) !== mb_strtolower($subject)) {
-        $title .= ' - '.$homeworkTitle;
-    }
+    $title = ac_buildStaffEventTitle($row, $homeworkTitle, $yearGroupsText, $assessmentDisplayBasis);
 
     $color = $customColors[$type] ?? ac_colorFromPalette($type);
-    $classificationClass = 'ac-event-homework-none';
-    if ($classification === 'formative') {
-        $classificationClass = 'ac-event-homework-formative';
-    } elseif ($classification === 'summative') {
-        $classificationClass = 'ac-event-homework-summative';
-    }
+    $classificationClass = 'ac-event-homework';
 
     $query = [
         'q' => '/modules/Planner/planner_view_full.php',
@@ -177,6 +195,7 @@ foreach ($homeworkRows as $row) {
         'extendedProps' => [
             'subject' => $subject,
             'homeworkTitle' => $homeworkTitle,
+            'classLabel' => $classLabel,
             'yearGroups' => $yearGroupsText,
             'primaryYearGroupID' => $roleCategory === 'Staff'
                 ? ac_getPrimaryYearGroupIDForEvent((string) ($row['gibbonYearGroupIDList'] ?? ''), $yearGroupSequenceMap)
@@ -185,8 +204,9 @@ foreach ($homeworkRows as $row) {
                 ? ac_getYearGroupSequenceForEvent((string) ($row['gibbonYearGroupIDList'] ?? ''), $yearGroupSequenceMap)
                 : null,
             'type' => $type,
-            'classification' => $classification,
+            'classification' => ac_getAssessmentClassificationLabel($classification, $assessmentClassificationDefinitions),
             'source' => 'Planner',
+            'tooltipLines' => $tooltipLines,
         ],
     ];
 }
@@ -202,13 +222,11 @@ foreach ($assessmentRows as $row) {
         continue;
     }
     $classification = is_array($meta) ? (string) ($meta['classification'] ?? '') : '';
-    if ($classification === 'formative' && $assessmentFormative !== 'Y') {
-        continue;
+    if ($classification !== '' && !isset($assessmentClassificationDefinitions[$classification])) {
+        $classification = '';
     }
-    if ($classification === 'summative' && $assessmentSummative !== 'Y') {
-        continue;
-    }
-    if ($classification === '' && $assessmentNone !== 'Y') {
+    $classificationKey = $classification !== '' ? $classification : 'none';
+    if (($assessmentFilterState[$classificationKey] ?? 'Y') !== 'Y') {
         continue;
     }
 
@@ -243,12 +261,7 @@ foreach ($assessmentRows as $row) {
         ? ac_resolveAssessmentClassificationBorderColor($classification, $assessmentClassificationStyles)
         : null;
 
-    $classificationClass = 'ac-event-assessment-none';
-    if ($classification === 'formative') {
-        $classificationClass = 'ac-event-assessment-formative';
-    } elseif ($classification === 'summative') {
-        $classificationClass = 'ac-event-assessment-summative';
-    }
+    $classificationClass = 'ac-event-assessment-'.preg_replace('/[^a-z0-9_-]+/', '-', $classificationKey);
 
     $url = null;
     if ($roleCategory === 'Staff') {
@@ -295,7 +308,7 @@ foreach ($assessmentRows as $row) {
                 ? ac_getYearGroupSequenceForEvent((string) ($row['gibbonYearGroupIDList'] ?? ''), $yearGroupSequenceMap)
                 : null,
             'type' => $type,
-            'classification' => $classification,
+            'classification' => ac_getAssessmentClassificationLabel($classification, $assessmentClassificationDefinitions),
             'source' => 'Markbook',
             'description' => $description,
             'tooltipLines' => $tooltipLines,
@@ -347,7 +360,9 @@ foreach ($assessmentRows as $row) {
     }
 
     if ($roleCategory === 'Staff') {
-        if ($canViewMarkbook) {
+        if ($canEditMarkbookData) {
+            // Keep the first merged assessment's direct edit URL.
+        } elseif ($canViewMarkbook) {
             $assessmentEvents[$mergeKey]['url'] = $absoluteURL.'/index.php?q='.rawurlencode('/modules/Markbook/markbook_view.php');
         } else {
             unset($assessmentEvents[$mergeKey]['url']);

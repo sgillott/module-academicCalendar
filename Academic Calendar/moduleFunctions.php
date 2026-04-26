@@ -1,7 +1,9 @@
 <?php
 /*
-Gibbon, Flexible & Open School System
-Copyright (C) 2010, Ross Parker
+Gibbon: the flexible, open school platform
+Founded by Ross Parker at ICHK Secondary. Built by Ross Parker, Sandra Kuipers and the Gibbon community (https://gibbonedu.org/about/)
+Copyright © 2010, Gibbon Foundation
+Gibbon™, Gibbon Education Ltd. (Hong Kong)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -94,7 +96,7 @@ function ac_getColorMap(SettingGateway $settingGateway): array
  * Decode and sanitize the event-type metadata JSON.
  *
  * Expected format:
- * `{eventType: {"visible":"Y|N","classification":"|formative|summative"}}`.
+ * `{eventType: {"visible":"Y|N","classification":"|classification_key"}}`.
  *
  * @param string|null $json JSON string from module settings.
  *
@@ -121,8 +123,8 @@ function ac_decodeEventTypeMeta(?string $json): array
         $visible = strtoupper((string) ($value['visible'] ?? 'Y'));
         $visible = $visible === 'N' ? 'N' : 'Y';
 
-        $classification = strtolower(trim((string) ($value['classification'] ?? '')));
-        if (!in_array($classification, ['', 'formative', 'summative'], true)) {
+        $classification = ac_normalizeAssessmentClassificationKey((string) ($value['classification'] ?? ''));
+        if ($classification === 'none') {
             $classification = '';
         }
 
@@ -152,19 +154,215 @@ function ac_getEventTypeMeta(SettingGateway $settingGateway): array
 /**
  * Decode and sanitize default assessment filter JSON.
  *
- * Expected format: {"formative":"Y|N","summative":"Y|N","none":"Y|N"}.
+ * Expected format: {"classification_key":"Y|N","none":"Y|N"}.
  *
  * @param string|null $json JSON string from module settings.
  *
- * @return array{formative:string,summative:string,none:string}
+ * @return array<string, array{label:string,color:string,locked:bool,displayInOverview:string}>
  */
-function ac_decodeDefaultAssessmentFilter(?string $json): array
+function ac_getDefaultAssessmentClassificationDefinitions(): array
 {
-    $defaults = [
-        'formative' => 'Y',
-        'summative' => 'Y',
-        'none' => 'Y',
+    return [
+        'formative' => [
+            'label' => __('Formative'),
+            'color' => '#F97316',
+            'locked' => false,
+            'displayInOverview' => 'N',
+        ],
+        'summative' => [
+            'label' => __('Summative'),
+            'color' => '#1D4ED8',
+            'locked' => false,
+            'displayInOverview' => 'Y',
+        ],
+        'none' => [
+            'label' => __('Not Classified'),
+            'color' => '#9CA3AF',
+            'locked' => true,
+            'displayInOverview' => 'N',
+        ],
     ];
+}
+
+function ac_normalizeAssessmentClassificationKey(?string $key): string
+{
+    $key = strtolower(trim((string) $key));
+    if ($key === '') {
+        return '';
+    }
+
+    $key = preg_replace('/[^a-z0-9]+/', '_', $key);
+    $key = trim((string) $key, '_');
+
+    return preg_match('/^[a-z0-9_]+$/', $key) === 1 ? $key : '';
+}
+
+function ac_slugifyAssessmentClassificationKey(?string $label): string
+{
+    return ac_normalizeAssessmentClassificationKey((string) $label);
+}
+
+/**
+ * Decode dynamic assessment classifications.
+ *
+ * Supports both the current object shape and the older flat key=>color map.
+ *
+ * @param string|null $json Stored JSON.
+ *
+ * @return array<string, array{label:string,color:string,locked:bool,displayInOverview:string}>
+ */
+function ac_decodeAssessmentClassificationDefinitions(?string $json): array
+{
+    $defaults = ac_getDefaultAssessmentClassificationDefinitions();
+    if (empty($json)) {
+        return $defaults;
+    }
+
+    $decoded = json_decode($json, true);
+    if (!is_array($decoded)) {
+        return $defaults;
+    }
+
+    // Backward compatibility with the older flat color map.
+    $isFlatMap = true;
+    foreach ($decoded as $value) {
+        if (!is_string($value)) {
+            $isFlatMap = false;
+            break;
+        }
+    }
+
+    if ($isFlatMap) {
+        foreach (array_keys($defaults) as $key) {
+            $color = ac_normalizeHexColor((string) ($decoded[$key] ?? ''));
+            if ($color !== null) {
+                $defaults[$key]['color'] = $color;
+            }
+        }
+
+        return $defaults;
+    }
+
+    $definitions = [
+        'none' => $defaults['none'],
+    ];
+    foreach ($decoded as $rawKey => $value) {
+        if (!is_array($value)) {
+            continue;
+        }
+
+        $key = ac_normalizeAssessmentClassificationKey((string) $rawKey);
+        if ($key === '') {
+            continue;
+        }
+
+        $label = trim((string) ($value['label'] ?? ''));
+        $color = ac_normalizeHexColor((string) ($value['color'] ?? ''));
+        if ($label === '' || $color === null) {
+            continue;
+        }
+
+        $definitions[$key] = [
+            'label' => $label,
+            'color' => $color,
+            'locked' => $key === 'none',
+            'displayInOverview' => ac_normalizeYesNo((string) ($value['displayInOverview'] ?? ($defaults[$key]['displayInOverview'] ?? 'N'))),
+        ];
+    }
+
+    $definitions['none'] = [
+        'label' => $defaults['none']['label'],
+        'color' => $definitions['none']['color'] ?? $defaults['none']['color'],
+        'locked' => true,
+        'displayInOverview' => 'N',
+    ];
+
+    return $definitions;
+}
+
+function ac_getAssessmentClassificationDefinitions(SettingGateway $settingGateway): array
+{
+    $value = $settingGateway->getSettingByScope('Academic Calendar', 'assessmentClassificationColors');
+
+    return ac_decodeAssessmentClassificationDefinitions($value ?: '');
+}
+
+/**
+ * Encode dynamic assessment classifications for storage.
+ *
+ * Not Classified is a hard-coded fallback bucket, so only its colour is stored.
+ *
+ * @param array<string, array{label:string,color:string,locked:bool,displayInOverview:string}> $definitions
+ *
+ * @return array<string, array{label:string,color:string,displayInOverview:string}>
+ */
+function ac_encodeAssessmentClassificationDefinitions(array $definitions): array
+{
+    $encoded = [];
+    foreach ($definitions as $key => $definition) {
+        $key = ac_normalizeAssessmentClassificationKey((string) $key);
+        if ($key === '') {
+            continue;
+        }
+
+        if ($key === 'none') {
+            $encoded['none'] = [
+                'label' => 'Not Classified',
+                'color' => ac_normalizeHexColor((string) ($definition['color'] ?? '')) ?? '#9CA3AF',
+                'displayInOverview' => 'N',
+            ];
+            continue;
+        }
+
+        $label = trim((string) ($definition['label'] ?? ''));
+        $color = ac_normalizeHexColor((string) ($definition['color'] ?? ''));
+        if ($label === '' || $color === null) {
+            continue;
+        }
+
+        $encoded[$key] = [
+            'label' => $label,
+            'color' => $color,
+            'displayInOverview' => ac_normalizeYesNo((string) ($definition['displayInOverview'] ?? 'N')),
+        ];
+    }
+
+    if (!isset($encoded['none'])) {
+        $encoded['none'] = [
+            'label' => 'Not Classified',
+            'color' => '#9CA3AF',
+            'displayInOverview' => 'N',
+        ];
+    }
+
+    return $encoded;
+}
+
+/**
+ * Build default assessment filter state from known classifications.
+ *
+ * @param array<string, array{label:string,color:string,locked:bool}> $definitions
+ *
+ * @return array<string, string>
+ */
+function ac_getDefaultAssessmentFilterState(array $definitions): array
+{
+    $defaults = [];
+    foreach ($definitions as $key => $_definition) {
+        $defaults[$key] = 'Y';
+    }
+
+    if (!isset($defaults['none'])) {
+        $defaults['none'] = 'Y';
+    }
+
+    return $defaults;
+}
+
+function ac_decodeDefaultAssessmentFilter(?string $json, ?array $definitions = null): array
+{
+    $definitions = $definitions ?? ac_getDefaultAssessmentClassificationDefinitions();
+    $defaults = ac_getDefaultAssessmentFilterState($definitions);
 
     if (empty($json)) {
         return $defaults;
@@ -175,13 +373,10 @@ function ac_decodeDefaultAssessmentFilter(?string $json): array
         return $defaults;
     }
 
-    $formative = strtoupper((string) ($data['formative'] ?? 'Y'));
-    $summative = strtoupper((string) ($data['summative'] ?? 'Y'));
-    $none = strtoupper((string) ($data['none'] ?? 'Y'));
-
-    $defaults['formative'] = $formative === 'N' ? 'N' : 'Y';
-    $defaults['summative'] = $summative === 'N' ? 'N' : 'Y';
-    $defaults['none'] = $none === 'N' ? 'N' : 'Y';
+    foreach (array_keys($defaults) as $key) {
+        $value = strtoupper((string) ($data[$key] ?? 'Y'));
+        $defaults[$key] = $value === 'N' ? 'N' : 'Y';
+    }
 
     return $defaults;
 }
@@ -191,70 +386,49 @@ function ac_decodeDefaultAssessmentFilter(?string $json): array
  *
  * @param SettingGateway $settingGateway Core setting gateway service.
  *
- * @return array{formative:string,summative:string,none:string}
+ * @return array<string, string>
  */
 function ac_getDefaultAssessmentFilter(SettingGateway $settingGateway): array
 {
+    $definitions = ac_getAssessmentClassificationDefinitions($settingGateway);
     $value = $settingGateway->getSettingByScope('Academic Calendar', 'defaultAssessmentFilter');
 
-    return ac_decodeDefaultAssessmentFilter($value ?: '');
+    return ac_decodeDefaultAssessmentFilter($value ?: '', $definitions);
 }
 
 /**
- * Normalize the staff calendar event label format setting.
+ * Resolve a normalized classification key to its display label.
  *
- * Supported values:
- * - `codeTitle`: class code and homework title
- * - `yearGroupCodeTitle`: year group, class code, and homework title
- * - `subjectCodeTitle`: subject name, class code, and homework title
- *
- * @param string|null $value Raw setting value.
- *
- * @return string Normalized format key.
+ * @param array<string, array{label:string,color:string,locked:bool}> $definitions
  */
-function ac_normalizeStaffEventFormat(?string $value): string
+function ac_getAssessmentClassificationLabel(string $classification, array $definitions): string
 {
-    $value = trim((string) $value);
-    $allowed = [
-        'codeTitle',
-        'yearGroupCodeTitle',
-        'subjectCodeTitle',
-    ];
-
-    return in_array($value, $allowed, true) ? $value : 'codeTitle';
-}
-
-/**
- * Retrieve the configured staff homework event label format.
- *
- * @param SettingGateway $settingGateway Core setting gateway service.
- *
- * @return string Normalized format key.
- */
-function ac_getStaffEventFormat(SettingGateway $settingGateway): string
-{
-    $value = $settingGateway->getSettingByScope('Academic Calendar', 'staffEventFormat');
-
-    return ac_normalizeStaffEventFormat($value ?: '');
-}
-
-/**
- * Determine if any event types are classified as formative or summative.
- *
- * @param array<string, array{visible:string,classification:string}> $meta
- *
- * @return bool
- */
-function ac_hasAssessmentClassifications(array $meta): bool
-{
-    foreach ($meta as $row) {
-        $classification = (string) ($row['classification'] ?? '');
-        if ($classification === 'formative' || $classification === 'summative') {
-            return true;
-        }
+    $classification = ac_normalizeAssessmentClassificationKey($classification);
+    if ($classification === '' || !isset($definitions[$classification])) {
+        $classification = 'none';
     }
 
-    return false;
+    return (string) ($definitions[$classification]['label'] ?? __('Not Classified'));
+}
+
+/**
+ * Normalize posted or query-string assessment filter state.
+ *
+ * @param array<string, array{label:string,color:string,locked:bool}> $definitions
+ * @param array<string, mixed> $source Raw key => Y/N state.
+ * @param array<string, string> $defaults Default key => Y/N state.
+ *
+ * @return array<string, string>
+ */
+function ac_normalizeAssessmentFilterState(array $definitions, array $source, array $defaults): array
+{
+    $state = ac_getDefaultAssessmentFilterState($definitions);
+    foreach (array_keys($state) as $key) {
+        $value = strtoupper((string) ($source[$key] ?? ($defaults[$key] ?? 'Y')));
+        $state[$key] = $value === 'N' ? 'N' : 'Y';
+    }
+
+    return $state;
 }
 
 /**
@@ -265,15 +439,17 @@ function ac_hasAssessmentClassifications(array $meta): bool
  * @param array<string, array{visible:string,classification:string}> $meta
  * @param bool $visibleOnly When true, only include visible types.
  *
- * @return array{formative:bool,summative:bool,none:bool}
+ * @return array<string, bool>
  */
-function ac_getAvailableAssessmentClassifications(array $meta, bool $visibleOnly = true): array
+function ac_getAvailableAssessmentClassifications(array $meta, array $definitions, bool $visibleOnly = true): array
 {
-    $available = [
-        'formative' => false,
-        'summative' => false,
-        'none' => false,
-    ];
+    $available = [];
+    foreach ($definitions as $key => $_definition) {
+        $available[$key] = false;
+    }
+    if (!isset($available['none'])) {
+        $available['none'] = false;
+    }
 
     foreach ($meta as $row) {
         $visible = strtoupper((string) ($row['visible'] ?? 'Y'));
@@ -282,10 +458,8 @@ function ac_getAvailableAssessmentClassifications(array $meta, bool $visibleOnly
         }
 
         $classification = (string) ($row['classification'] ?? '');
-        if ($classification === 'formative') {
-            $available['formative'] = true;
-        } elseif ($classification === 'summative') {
-            $available['summative'] = true;
+        if ($classification !== '' && isset($available[$classification])) {
+            $available[$classification] = true;
         } else {
             $available['none'] = true;
         }
@@ -326,11 +500,9 @@ function ac_mixHexWithWhite(string $color, float $whiteRatio): string
  */
 function ac_getDefaultAssessmentClassificationColors(): array
 {
-    return [
-        'formative' => '#F97316',
-        'summative' => '#1D4ED8',
-        'none' => '#9CA3AF',
-    ];
+    return array_map(function ($definition) {
+        return (string) $definition['color'];
+    }, ac_getDefaultAssessmentClassificationDefinitions());
 }
 
 /**
@@ -342,24 +514,11 @@ function ac_getDefaultAssessmentClassificationColors(): array
  */
 function ac_decodeAssessmentClassificationColors(?string $json): array
 {
-    $defaults = ac_getDefaultAssessmentClassificationColors();
-    if (empty($json)) {
-        return $defaults;
-    }
+    $definitions = ac_decodeAssessmentClassificationDefinitions($json);
 
-    $decoded = json_decode($json, true);
-    if (!is_array($decoded)) {
-        return $defaults;
-    }
-
-    foreach (array_keys($defaults) as $key) {
-        $color = ac_normalizeHexColor((string) ($decoded[$key] ?? ''));
-        if ($color !== null) {
-            $defaults[$key] = $color;
-        }
-    }
-
-    return $defaults;
+    return array_map(function ($definition) {
+        return (string) $definition['color'];
+    }, $definitions);
 }
 
 /**
@@ -395,20 +554,15 @@ function ac_getUseAssessmentClassificationColorInCalendar(SettingGateway $settin
  */
 function ac_buildAssessmentClassificationStyles(array $colors): array
 {
-    return [
-        'formative' => [
-            'border' => $colors['formative'],
-            'highlight' => ac_mixHexWithWhite($colors['formative'], 0.92),
-        ],
-        'summative' => [
-            'border' => $colors['summative'],
-            'highlight' => ac_mixHexWithWhite($colors['summative'], 0.92),
-        ],
-        'none' => [
-            'border' => $colors['none'],
-            'highlight' => ac_mixHexWithWhite($colors['none'], 0.96),
-        ],
-    ];
+    $styles = [];
+    foreach ($colors as $key => $color) {
+        $styles[$key] = [
+            'border' => $color,
+            'highlight' => ac_mixHexWithWhite($color, $key === 'none' ? 0.96 : 0.92),
+        ];
+    }
+
+    return $styles;
 }
 
 /**
@@ -425,7 +579,7 @@ function ac_resolveAssessmentEventColor(
     array $classificationStyles,
     bool $useClassificationColor = false
 ): string {
-    $classificationKey = in_array($classification, ['formative', 'summative'], true) ? $classification : 'none';
+    $classificationKey = $classification !== '' && isset($classificationStyles[$classification]) ? $classification : 'none';
     $classificationColor = ac_normalizeHexColor((string) ($classificationStyles[$classificationKey]['highlight'] ?? ''));
     $directColor = ac_normalizeHexColor((string) $assessmentColor);
 
@@ -453,7 +607,7 @@ function ac_resolveAssessmentClassificationBorderColor(
     string $classification,
     array $classificationStyles
 ): ?string {
-    $classificationKey = in_array($classification, ['formative', 'summative'], true) ? $classification : 'none';
+    $classificationKey = $classification !== '' && isset($classificationStyles[$classification]) ? $classification : 'none';
 
     return ac_normalizeHexColor((string) ($classificationStyles[$classificationKey]['border'] ?? ''));
 }
@@ -475,7 +629,7 @@ function ac_normalizeAssessmentDisplayBasis(?string $value): string
         'learningArea',
     ];
 
-    return in_array($value, $allowed, true) ? $value : 'courseShortName';
+    return in_array($value, $allowed, true) ? $value : 'classCode';
 }
 
 /**
@@ -575,6 +729,22 @@ function ac_getAssessmentDisplayValue(array $row, string $basis, string $fallbac
 }
 
 /**
+ * Resolve a homework display value from the configured basis.
+ *
+ * Homework rows share the same course/class fields as assessments.
+ *
+ * @param array<string, mixed> $row Homework row data.
+ * @param string $basis Display basis.
+ * @param string $fallbackLabel Fallback label.
+ *
+ * @return string
+ */
+function ac_getHomeworkDisplayValue(array $row, string $basis, string $fallbackLabel): string
+{
+    return ac_getAssessmentDisplayValue($row, $basis, $fallbackLabel);
+}
+
+/**
  * Build a class label for assessment tooltips.
  *
  * Prefers the Gibbon-style `courseShort.classShort` format and falls back to
@@ -629,6 +799,36 @@ function ac_buildAssessmentTooltipLines(array $row, string $assessmentTitle, str
     $description = trim((string) ($row['assessmentDescription'] ?? ''));
     if ($description !== '') {
         $tooltipLines[] = __('Details').': '.$description;
+    }
+
+    return $tooltipLines;
+}
+
+/**
+ * Build formatted tooltip lines for a single homework row.
+ *
+ * @param array<string, mixed> $row Homework row data.
+ * @param string $homeworkTitle Display title for the homework.
+ * @param string $type Event type label.
+ * @param string $yearGroupsText Optional rendered year-group text.
+ *
+ * @return array<int, string>
+ */
+function ac_buildHomeworkTooltipLines(array $row, string $homeworkTitle, string $type, string $yearGroupsText = ''): array
+{
+    $tooltipLines = [$homeworkTitle];
+
+    $classLabel = ac_getAssessmentClassLabel($row);
+    if ($classLabel !== '') {
+        $tooltipLines[] = __('Class').': '.$classLabel;
+    }
+
+    if ($yearGroupsText !== '') {
+        $tooltipLines[] = __('Year Group').': '.$yearGroupsText;
+    }
+
+    if ($type !== '') {
+        $tooltipLines[] = __('Type').': '.$type;
     }
 
     return $tooltipLines;
@@ -768,7 +968,7 @@ function ac_getSubjectLabel(array $row, string $fallbackLabel, string $roleCateg
     }
 
     if ($roleCategory === 'Staff') {
-        return $subjectCode !== '' ? $subjectCode : $subjectName;
+        return ac_getHomeworkDisplayValue($row, 'classCode', $subjectCode !== '' ? $subjectCode : $subjectName);
     }
 
     return $subjectName !== '' ? $subjectName : $subjectCode;
@@ -807,21 +1007,8 @@ function ac_buildYearGroupsText(string $yearGroupIDList, array $yearGroupMap): s
  */
 function ac_buildStaffEventTitle(array $row, string $itemTitle, string $yearGroupsText, string $staffEventFormat): string
 {
-    [$subjectName, $subjectCode] = ac_getSubjectParts($row);
-
-    if ($staffEventFormat === 'subjectCodeTitle') {
-        $prefix = $subjectName !== '' ? $subjectName : $subjectCode;
-        if ($subjectCode !== '' && $subjectName !== '' && $subjectCode !== $subjectName) {
-            $prefix .= ' ('.$subjectCode.')';
-        }
-
-        return $itemTitle !== '' && mb_strtolower($itemTitle) !== mb_strtolower($prefix)
-            ? $prefix.' - '.$itemTitle
-            : $prefix;
-    }
-
-    $prefix = $subjectCode !== '' ? $subjectCode : $subjectName;
-    if ($staffEventFormat === 'yearGroupCodeTitle' && $yearGroupsText !== '') {
+    $prefix = ac_getHomeworkDisplayValue($row, $staffEventFormat, $itemTitle !== '' ? $itemTitle : __('Homework'));
+    if ($staffEventFormat === 'learningArea' && $yearGroupsText !== '') {
         $prefix = '('.$yearGroupsText.') '.$prefix;
     }
 
@@ -1018,6 +1205,88 @@ function ac_sanitizeNumericID(?string $value): string
     }
 
     return $value;
+}
+
+/**
+ * Validate and normalize a calendar feed date parameter.
+ *
+ * Accepts ISO-like date strings commonly sent by FullCalendar, including:
+ * - YYYY-MM-DD
+ * - YYYY-MM-DDTHH:MM
+ * - YYYY-MM-DDTHH:MM:SS
+ * - either of the above with a space instead of T
+ * - optional timezone suffix such as Z or +02:00
+ *
+ * Returns a MySQL-friendly local datetime string, or null when invalid.
+ *
+ * @param string|null $value Raw request value.
+ *
+ * @return string|null Normalized datetime or null.
+ */
+function ac_parseCalendarFeedDate(?string $value): ?string
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return null;
+    }
+
+    $pattern = '/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?(?:Z|[+-]\d{2}:\d{2})?$/';
+    if (preg_match($pattern, $value) !== 1) {
+        return null;
+    }
+
+    try {
+        $date = new \DateTimeImmutable($value);
+        $timezone = new \DateTimeZone(date_default_timezone_get());
+
+        return $date->setTimezone($timezone)->format('Y-m-d H:i:s');
+    } catch (\Exception $exception) {
+        return null;
+    }
+}
+
+/**
+ * Build the date window used by the calendar feed for the current view.
+ *
+ * The month and list-month views both use a month-wide window. The week view
+ * respects the configured first day of the week.
+ *
+ * @param string $viewDate Selected calendar date (`Y-m-d`) or empty string.
+ * @param string $viewType FullCalendar view key.
+ * @param int $firstDay Week start day where Sunday = 0, Monday = 1, Saturday = 6.
+ *
+ * @return array{start:string,end:string}
+ */
+function ac_getCalendarViewWindow(string $viewDate, string $viewType, int $firstDay = 1): array
+{
+    $baseDate = $viewDate;
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $baseDate) !== 1) {
+        $baseDate = date('Y-m-d');
+    }
+
+    $date = \DateTimeImmutable::createFromFormat('Y-m-d', $baseDate);
+    if (!$date) {
+        $date = new \DateTimeImmutable('today');
+    }
+
+    if ($viewType === 'timeGridWeek') {
+        $weekStart = $date;
+        while ((int) $weekStart->format('w') !== $firstDay) {
+            $weekStart = $weekStart->modify('-1 day');
+        }
+
+        return [
+            'start' => $weekStart->format('Y-m-d 00:00:00'),
+            'end' => $weekStart->modify('+7 days')->format('Y-m-d 00:00:00'),
+        ];
+    }
+
+    $monthStart = $date->modify('first day of this month');
+
+    return [
+        'start' => $monthStart->format('Y-m-d 00:00:00'),
+        'end' => $monthStart->modify('+1 month')->format('Y-m-d 00:00:00'),
+    ];
 }
 
 /**

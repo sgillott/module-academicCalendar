@@ -1,4 +1,23 @@
 <?php
+/*
+Gibbon: the flexible, open school platform
+Founded by Ross Parker at ICHK Secondary. Built by Ross Parker, Sandra Kuipers and the Gibbon community (https://gibbonedu.org/about/)
+Copyright © 2010, Gibbon Foundation
+Gibbon™, Gibbon Education Ltd. (Hong Kong)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 
 use Gibbon\Forms\Form;
 use Gibbon\Forms\DatabaseFormFactory;
@@ -13,7 +32,7 @@ require_once __DIR__.'/moduleFunctions.php';
  * Builds the module settings form, including:
  * - enabled year groups
  * - calendar display options
- * - summative overview thresholds
+ * - overview thresholds
  * - per-event-type display metadata
  * - permissions shortcut.
  */
@@ -32,14 +51,16 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $showAssessmentEvents = (string) $settingGateway->getSettingByScope('Academic Calendar', 'showAssessmentEvents');
     $defaultAssessmentFilter = ac_getDefaultAssessmentFilter($settingGateway);
     $defaultStaffView = (string) $settingGateway->getSettingByScope('Academic Calendar', 'defaultStaffView');
-    $staffEventFormat = ac_getStaffEventFormat($settingGateway);
     $enabledYearGroupIDList = (string) ($settingGateway->getSettingByScope('Academic Calendar', 'gibbonYearGroupIDList') ?: '');
-    $defaultSummativeThreshold = ac_getSummativeThresholdDefault($settingGateway);
+    $defaultOverviewThreshold = ac_getSummativeThresholdDefault($settingGateway);
     $thresholdByYearGroup = ac_getSummativeThresholdByYearGroup($settingGateway);
     $overviewWeekNumberMode = ac_getOverviewWeekNumberMode($settingGateway);
     $assessmentDisplayBasis = ac_getAssessmentDisplayBasis($settingGateway);
     $mergeSameDayAssessments = ac_getMergeSameDayAssessments($settingGateway) ? 'Y' : 'N';
-    $assessmentClassificationColors = ac_getAssessmentClassificationColors($settingGateway);
+    $assessmentClassificationDefinitions = ac_getAssessmentClassificationDefinitions($settingGateway);
+    $assessmentClassificationColors = array_map(function ($definition) {
+        return (string) $definition['color'];
+    }, $assessmentClassificationDefinitions);
     $assessmentClassificationStyles = ac_buildAssessmentClassificationStyles($assessmentClassificationColors);
     $useAssessmentClassificationColorInCalendar = ac_getUseAssessmentClassificationColorInCalendar($settingGateway) ? 'Y' : 'N';
     $isAdminRole = (string) $session->get('gibbonRoleIDCurrent') === '001';
@@ -69,23 +90,24 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
             c.name AS courseName,
             c.nameShort AS courseNameShort,
             cc.nameShort AS classNameShort,
+            COALESCE(d.name, d.nameShort, '') AS learningArea,
             c.gibbonYearGroupIDList
         FROM gibbonPlannerEntry p
         JOIN gibbonCourseClass cc ON (p.gibbonCourseClassID = cc.gibbonCourseClassID)
         JOIN gibbonCourse c ON (cc.gibbonCourseID = c.gibbonCourseID)
+        LEFT JOIN gibbonDepartment d ON (c.gibbonDepartmentID = d.gibbonDepartmentID)
         WHERE p.homework = 'Y'
           AND p.homeworkDueDateTime IS NOT NULL
         ORDER BY p.homeworkDueDateTime DESC
         LIMIT 1
     ")->fetch(\PDO::FETCH_ASSOC);
-    $usingHomeworkFallback = false;
     if (!is_array($sampleHomeworkRow) || empty($sampleHomeworkRow)) {
-        $usingHomeworkFallback = true;
         $sampleHomeworkRow = [
             'homeworkName' => __('Essay draft'),
             'courseName' => __('English'),
             'courseNameShort' => '10Eng',
             'classNameShort' => '1',
+            'learningArea' => __('English'),
             'gibbonYearGroupIDList' => '010',
         ];
     }
@@ -106,9 +128,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
         ORDER BY mc.date DESC, mc.gibbonMarkbookColumnID DESC
         LIMIT 1
     ")->fetch(\PDO::FETCH_ASSOC);
-    $usingAssessmentFallback = false;
     if (!is_array($sampleAssessmentRow) || empty($sampleAssessmentRow)) {
-        $usingAssessmentFallback = true;
         $sampleAssessmentRow = [
             'assessmentName' => __('Mock exam'),
             'courseName' => __('Chemistry'),
@@ -121,30 +141,27 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
 
     $sampleHomeworkTitle = trim((string) ($sampleHomeworkRow['homeworkName'] ?? __('Homework')));
     $sampleHomeworkYearGroupsText = ac_buildYearGroupsText((string) ($sampleHomeworkRow['gibbonYearGroupIDList'] ?? ''), $yearGroupMap);
-    $staffEventFormatPreviewOptions = [
-        'codeTitle' => ac_buildStaffEventTitle($sampleHomeworkRow, $sampleHomeworkTitle, $sampleHomeworkYearGroupsText, 'codeTitle'),
-        'yearGroupCodeTitle' => ac_buildStaffEventTitle($sampleHomeworkRow, $sampleHomeworkTitle, $sampleHomeworkYearGroupsText, 'yearGroupCodeTitle'),
-        'subjectCodeTitle' => ac_buildStaffEventTitle($sampleHomeworkRow, $sampleHomeworkTitle, $sampleHomeworkYearGroupsText, 'subjectCodeTitle'),
-    ];
-
     $sampleAssessmentTitle = trim((string) ($sampleAssessmentRow['assessmentName'] ?? __('Assessment')));
     $sampleAssessmentYearGroupsText = ac_buildYearGroupsText((string) ($sampleAssessmentRow['gibbonYearGroupIDList'] ?? ''), $yearGroupMap);
-    $assessmentDisplayPreviewOptions = [];
+    $eventDisplayPreviewOptions = [];
     foreach (['classCode', 'courseShortName', 'courseName', 'learningArea'] as $basis) {
-        $subject = ac_getAssessmentDisplayValue($sampleAssessmentRow, $basis, __('Assessment'));
-        $preview = $subject;
-        if ($basis === 'learningArea' && $sampleAssessmentYearGroupsText !== '') {
-            $preview = '('.$sampleAssessmentYearGroupsText.') '.$preview;
-        }
-        if ($sampleAssessmentTitle !== '' && mb_strtolower($sampleAssessmentTitle) !== mb_strtolower($subject)) {
-            $preview .= ' - '.$sampleAssessmentTitle;
-        }
-        $assessmentDisplayPreviewOptions[$basis] = $preview;
+        $homeworkPreview = ac_buildStaffEventTitle($sampleHomeworkRow, $sampleHomeworkTitle, $sampleHomeworkYearGroupsText, $basis);
+        $assessmentSubject = ac_getAssessmentDisplayValue($sampleAssessmentRow, $basis, __('Assessment'));
+        $assessmentPreview = ac_buildAssessmentEventTitle(
+            $assessmentSubject,
+            $sampleAssessmentTitle,
+            'Staff',
+            $basis,
+            $sampleAssessmentYearGroupsText
+        );
+        $eventDisplayPreviewOptions[$basis] = __('Homework').': '.$homeworkPreview."\n".__('Assessment').': '.$assessmentPreview;
     }
 
     $form = Form::create('settings_manage', $session->get('absoluteURL').'/modules/'.$session->get('module').'/settings_manageProcess.php');
     $form->setFactory(DatabaseFormFactory::create($pdo));
     $form->addHiddenValue('address', $session->get('address'));
+    $form->addHiddenValue('addAssessmentClassification', '');
+    $form->addHiddenValue('deleteAssessmentClassification', '');
 
     $row = $form->addRow();
     $row->addHeading(__('Year Groups'));
@@ -179,13 +196,13 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $row = $form->addRow();
     $row->addClass('acAssessmentSettings');
     $row->addLabel('defaultAssessmentFilter', __('Default Assessment Filter'))
-        ->description(__('Default user filter for formative and summative assessment events.'));
+        ->description(__('Default user filter for assessment classifications.'));
+    $defaultAssessmentFilterOptions = [];
+    foreach ($assessmentClassificationDefinitions as $key => $definition) {
+        $defaultAssessmentFilterOptions[$key] = (string) $definition['label'];
+    }
     $row->addCheckbox('defaultAssessmentFilter')
-        ->fromArray([
-            'formative' => __('Formative'),
-            'summative' => __('Summative'),
-            'none' => __('Not Classified'),
-        ])
+        ->fromArray($defaultAssessmentFilterOptions)
         ->checked(array_keys(array_filter($defaultAssessmentFilter, function ($value) {
             return strtoupper((string) $value) === 'Y';
         })))
@@ -200,28 +217,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     ])->selected($defaultStaffView === 'yearGroup' ? 'yearGroup' : 'all');
 
     $row = $form->addRow();
-    $row->addLabel('staffEventFormat', __('Homework Format in Staff Calendar'))
-        ->description(__('Choose how homework titles appear for staff in the calendar. This controls how course, class code, year group, and title are combined.'));
-    $row->addSelect('staffEventFormat')->fromArray([
-        'codeTitle' => __('Class Code - Title'),
-        'yearGroupCodeTitle' => __('Year Group + Class Code - Title'),
-        'subjectCodeTitle' => __('Course (Class Code) - Title'),
-    ])->selected($staffEventFormat);
-
-    $row = $form->addRow();
-    $row->addLabel('staffEventFormatPreview', __('Preview'))
-        ->description($usingHomeworkFallback
-            ? __('Preview uses an example homework because no recent homework was found in this environment.')
-            : __('Preview uses your latest homework event from the database.'));
-    $row->addContent(
-        '<div class="acSettingsPreview" id="acStaffEventFormatPreview" data-preview-map="'.htmlspecialchars(json_encode($staffEventFormatPreviewOptions), ENT_QUOTES, 'UTF-8').'">'
-        .htmlspecialchars($staffEventFormatPreviewOptions[$staffEventFormat], ENT_QUOTES, 'UTF-8')
-        .'</div>'
-    );
-
-    $row = $form->addRow();
-    $row->addLabel('assessmentDisplayBasis', __('Assessment Format in Staff Calendar'))
-        ->description(__('Choose which course field is used when naming assessment events for staff. This also controls how same-day assessment merges are labelled.'));
+    $row->addLabel('assessmentDisplayBasis', __('Calendar Event Display Basis'))
+        ->description(__('Choose which course field is used when naming homework and assessment events in the calendar.'));
     $row->addSelect('assessmentDisplayBasis')->fromArray([
         'classCode' => __('Class Code'),
         'courseShortName' => __('Course Short Name'),
@@ -231,22 +228,20 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
 
     $row = $form->addRow();
     $row->addLabel('assessmentDisplayBasisPreview', __('Preview'))
-        ->description($usingAssessmentFallback
-            ? __('Preview uses an example assessment because no recent markbook assessment was found in this environment.')
-            : __('Preview uses your latest markbook assessment from the database.'));
+        ->description(__('Preview shows how homework and assessment events will be shown in the calendar.'));
     $row->addContent(
-        '<div class="acSettingsPreview" id="acAssessmentDisplayBasisPreview" data-preview-map="'.htmlspecialchars(json_encode($assessmentDisplayPreviewOptions), ENT_QUOTES, 'UTF-8').'">'
-        .htmlspecialchars($assessmentDisplayPreviewOptions[$assessmentDisplayBasis], ENT_QUOTES, 'UTF-8')
+        '<div class="acSettingsPreview" id="acAssessmentDisplayBasisPreview" data-preview-map="'.htmlspecialchars(json_encode($eventDisplayPreviewOptions), ENT_QUOTES, 'UTF-8').'">'
+        .nl2br(htmlspecialchars($eventDisplayPreviewOptions[$assessmentDisplayBasis], ENT_QUOTES, 'UTF-8'))
         .'</div>'
     );
 
     $row = $form->addRow();
     $row->addLabel('mergeSameDayAssessments', __('Merge Same-Day Assessments'))
-        ->description(__('When enabled, assessment rows with the same display value on the same date are shown as one grouped event.'));
+        ->description(__('When enabled, assessment rows with the same display value on the same date are grouped together in the calendar and overview.'));
     $row->addYesNo('mergeSameDayAssessments')->selected($mergeSameDayAssessments);
 
     $row = $form->addRow();
-    $row->addHeading(__('Summative Assessment Overview'));
+    $row->addHeading(__('Assessment Overview'));
 
     $row = $form->addRow();
     $row->addLabel('overviewWeekNumberMode', __('Overview Week Number Mode'))
@@ -257,13 +252,13 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     ])->selected($overviewWeekNumberMode);
 
     $row = $form->addRow();
-    $row->addLabel('summativeWeeklyThresholdDefault', __('Default Summative Assessment Weekly Threshold'))
+    $row->addLabel('summativeWeeklyThresholdDefault', __('Default Overview Weekly Threshold'))
         ->description(__('Fallback threshold used when a year group does not have its own setting.'));
     $row->addNumber('summativeWeeklyThresholdDefault')
         ->minimum(1)
         ->maximum(99)
         ->required()
-        ->setValue($defaultSummativeThreshold)
+        ->setValue($defaultOverviewThreshold)
         ->setClass('w-20');
 
     $enabledYearGroupIDs = ac_parseIDList($enabledYearGroupIDList);
@@ -271,7 +266,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
 
     if (!empty($overviewYearGroups)) {
         $row = $form->addRow();
-        $row->addLabel('summativeWeeklyThresholdByYearGroup', __('Threshold by Year Group'))
+        $row->addLabel('summativeWeeklyThresholdByYearGroup', __('Overview Threshold by Year Group'))
             ->description(__('Leave blank to use the default threshold.'));
 
         $table = $row->addTable('acThresholdTable')->addClass('colorOddEven');
@@ -301,35 +296,65 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $row->addContent(__('Configure colour, visibility, and assessment classification for each markbook event type.'));
 
     $row = $form->addRow();
-    $row->addLabel('assessmentClassificationColor_formative', __('Formative Colour'))
-        ->description(__('Used for formative filter controls, settings-row highlighting, and calendar events when classification colours are enabled.'));
-    $row->addColor('assessmentClassificationColor_formative')
+    $row->addLabel('assessmentClassifications', __('Assessment Classification Metadata'))
+        ->description(__('Create the classifications available for markbook event types. Not Classified is a fixed fallback for visible unclassified events.'));
+    $classificationTable = $row->addTable('acClassificationManageTable')->addClass('colorOddEven acClassificationManageTable');
+    $header = $classificationTable->addHeaderRow();
+    $header->addContent(__('Label'));
+    $header->addContent(__('Colour'));
+    $header->addContent(__('Display in Overview'));
+    $header->addContent(__('Delete'));
+
+    foreach ($assessmentClassificationDefinitions as $key => $definition) {
+        if ($key === 'none') {
+            continue;
+        }
+
+        $classificationRow = $classificationTable->addRow();
+        $classificationRow->addClass('acClassificationManageRow');
+        $classificationRow->addTextField('assessmentClassificationLabel['.$key.']')
+            ->setValue((string) $definition['label'])
+            ->setClass('w-48');
+        $classificationRow->addColor('assessmentClassificationColor['.$key.']')
+            ->setPalette('background')
+            ->setOuterClass('acColorSetting')
+            ->addClass('acColorSettingInput')
+            ->setValue((string) $definition['color']);
+        $classificationRow->addCheckbox('assessmentClassificationDisplayInOverview[]')
+            ->setValue($key)
+            ->checked((string) ($definition['displayInOverview'] ?? 'N') === 'Y' ? $key : '')
+            ->alignCenter();
+        $classificationRow->addContent(
+            '<button type="button" data-classification-key="'.htmlspecialchars($key, ENT_QUOTES, 'UTF-8').'" title="'.__('Delete').'" class="acDeleteClassificationButton inline-flex items-center align-middle rounded-md text-sm sm:leading-5 font-semibold px-3 py-2 bg-white shadow-sm border border-gray-400 hover:bg-gray-100 text-gray-600 hover:text-red-700 hover:border-red-700">'
+            .icon('solid', 'delete', 'size-6 sm:size-5')
+            .'</button>'
+        )->addClass('textCenter');
+    }
+
+    $classificationFallbackRow = $classificationTable->addRow();
+    $classificationFallbackRow->addClass('acClassificationManageRow acClassificationFallbackRow');
+    $classificationFallbackRow->addContent('<strong>'.htmlspecialchars((string) $assessmentClassificationDefinitions['none']['label'], ENT_QUOTES, 'UTF-8').'</strong>');
+    $classificationFallbackRow->addColor('assessmentClassificationColor[none]')
         ->setPalette('background')
         ->setOuterClass('acColorSetting')
         ->addClass('acColorSettingInput')
-        ->setValue($assessmentClassificationColors['formative']);
+        ->setValue((string) $assessmentClassificationDefinitions['none']['color']);
+    $classificationFallbackRow->addContent('');
+    $classificationFallbackRow->addContent('');
+
+    $classificationAddRow = $classificationTable->addRow();
+    $classificationAddRow->addClass('acClassificationAddRow');
+    $classificationAddRow->addContent(
+        '<button type="button" id="acAddClassificationButton" class="inline-flex items-center align-middle rounded-md text-sm sm:leading-5 font-semibold px-3 py-2 bg-white shadow-sm border border-gray-400 hover:bg-gray-100 hover:text-green-500 hover:border-green-500 text-gray-600">'
+        .icon('solid', 'add', 'size-6 sm:size-5 lg:-ml-0.5 lg:mr-1.5')
+        .'<span class="hidden lg:block text-gray-800 whitespace-nowrap">'
+        .__('Add Classification')
+        .'</span></button>'
+    )->addClass('textRight');
 
     $row = $form->addRow();
-    $row->addLabel('assessmentClassificationColor_summative', __('Summative Colour'))
-        ->description(__('Used for summative filter controls, settings-row highlighting, and calendar events when classification colours are enabled.'));
-    $row->addColor('assessmentClassificationColor_summative')
-        ->setPalette('background')
-        ->setOuterClass('acColorSetting')
-        ->addClass('acColorSettingInput')
-        ->setValue($assessmentClassificationColors['summative']);
-
-    $row = $form->addRow();
-    $row->addLabel('assessmentClassificationColor_none', __('Not Classified Colour'))
-        ->description(__('Used for not-classified filter controls, settings-row highlighting, and calendar events when classification colours are enabled.'));
-    $row->addColor('assessmentClassificationColor_none')
-        ->setPalette('background')
-        ->setOuterClass('acColorSetting')
-        ->addClass('acColorSettingInput')
-        ->setValue($assessmentClassificationColors['none']);
-
-    $row = $form->addRow();
-    $row->addLabel('useAssessmentClassificationColorInCalendar', __('Use Assessment Classification Colour in Calendar'))
-        ->description(__('When enabled, assessment events on the Homework/Assessment Calendar use the formative, summative, or not classified colours instead of the event type colour.'));
+    $row->addLabel('useAssessmentClassificationColorInCalendar', __('Override and Use Assessment Classification Colour in Calendar'))
+        ->description(__('When enabled, assessment events on the Homework/Assessment Calendar use assessment classification colours instead of the event type colour.'));
     $row->addYesNo('useAssessmentClassificationColorInCalendar')->selected($useAssessmentClassificationColorInCalendar);
 
     if (!empty($types)) {
@@ -338,7 +363,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
         $header = $table->addHeaderRow();
         $header->addContent(__('Type'));
         $header->addContent(__('Colour'));
-        $header->addContent(__('Assessment Classification'));
+        $header->addContent(__('Assessment Classification Metadata'));
         $header->addContent(__('Visible'));
         $header->addCheckbox('acCheckAllEventTypes')->setClass('floatNone textCenter checkall acEventTypesCheckAll');
 
@@ -351,9 +376,16 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
 
             $defaultColor = $colors[$type] ?? ac_colorFromPalette($type);
             $visible = strtoupper((string) ($typeMeta[$type]['visible'] ?? 'Y'));
-            $classification = strtolower((string) ($typeMeta[$type]['classification'] ?? ''));
-            if (!in_array($classification, ['', 'formative', 'summative'], true)) {
+            $classification = ac_normalizeAssessmentClassificationKey((string) ($typeMeta[$type]['classification'] ?? ''));
+            if ($classification === 'none' || !isset($assessmentClassificationDefinitions[$classification])) {
                 $classification = '';
+            }
+            $classificationOptions = ['' => __('Not Classified')];
+            foreach ($assessmentClassificationDefinitions as $key => $definition) {
+                if ($key === 'none') {
+                    continue;
+                }
+                $classificationOptions[$key] = (string) $definition['label'];
             }
             $row = $table->addRow();
             $row->addClass('acEventTypeRow');
@@ -363,11 +395,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
                 ->setOuterClass('acColorSetting')
                 ->addClass('acColorSettingInput')
                 ->setValue($defaultColor);
-            $row->addSelect($classificationField)->fromArray([
-                '' => __('None'),
-                'formative' => __('Formative'),
-                'summative' => __('Summative'),
-            ])->selected($classification)->addClass('w-48');
+            $row->addSelect($classificationField)->fromArray($classificationOptions)->selected($classification)->addClass('w-48 acEventTypeClassification');
             $row->addContent('');
             $row->addCheckbox($visibleField)->setValue('Y')->checked($visible === 'Y' ? 'Y' : '')->addClass('acEventTypeVisible')->alignCenter();
         }
@@ -390,114 +418,17 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/setting
     $row->addFooter();
     $row->addSubmit();
 
-    echo '<style>
-        #acEventTypesTable {
-            --acClassificationNoneBorder: '.htmlspecialchars($assessmentClassificationStyles['none']['border']).';
-            --acClassificationNoneHighlight: '.htmlspecialchars($assessmentClassificationStyles['none']['highlight']).';
-            --acClassificationFormativeBorder: '.htmlspecialchars($assessmentClassificationStyles['formative']['border']).';
-            --acClassificationFormativeHighlight: '.htmlspecialchars($assessmentClassificationStyles['formative']['highlight']).';
-            --acClassificationSummativeBorder: '.htmlspecialchars($assessmentClassificationStyles['summative']['border']).';
-            --acClassificationSummativeHighlight: '.htmlspecialchars($assessmentClassificationStyles['summative']['highlight']).';
-        }
-        .acSettingsPreview {
-            display: inline-block;
-            min-width: 28rem;
-            max-width: 100%;
-            padding: 0.75rem 1rem;
-            border: 1px solid #d1d5db;
-            border-radius: 0.5rem;
-            background: #f8fafc;
-            color: #1f2937;
-            font-weight: 600;
-            line-height: 1.5;
-        }
-    </style>';
-
     echo $form->getOutput();
     ?>
+    <script src="<?= $session->get('absoluteURL'); ?>/modules/<?= rawurlencode($session->get('module')); ?>/js/module.js"></script>
     <script>
-    (function () {
-        var table = document.getElementById('acEventTypesTable');
-        if (!table) return;
-
-        var checkAll = table.querySelector('input.acEventTypesCheckAll[type="checkbox"]');
-        var boxes = function () {
-            return Array.prototype.slice.call(table.querySelectorAll('input.acEventTypeVisible[type="checkbox"], .acEventTypeVisible input[type="checkbox"]'));
-        };
-        var classificationSelects = Array.prototype.slice.call(table.querySelectorAll('select[name^="typeClassification["]'));
-        var updatePreview = function (selectName, previewId) {
-            var selectEl = document.querySelector('select[name="' + selectName + '"]');
-            var previewEl = document.getElementById(previewId);
-            if (!selectEl || !previewEl) return;
-
-            var previewMap = {};
-            try {
-                previewMap = JSON.parse(previewEl.getAttribute('data-preview-map') || '{}');
-            } catch (error) {
-                previewMap = {};
-            }
-
-            var render = function () {
-                var value = selectEl.value;
-                previewEl.textContent = previewMap[value] || '';
-            };
-
-            selectEl.addEventListener('change', render);
-            render();
-        };
-
-        var updateCheckAllState = function () {
-            if (!checkAll) return;
-            var visibleBoxes = boxes();
-            var checkedCount = visibleBoxes.filter(function (box) {
-                return box.checked;
-            }).length;
-
-            checkAll.checked = visibleBoxes.length > 0 && checkedCount === visibleBoxes.length;
-            checkAll.indeterminate = checkedCount > 0 && checkedCount < visibleBoxes.length;
-        };
-
-        var updateClassificationStyle = function (selectEl) {
-            if (!selectEl) return;
-
-            var row = selectEl.closest('tr');
-            if (!row) return;
-
-            row.classList.remove('acClassificationNone', 'acClassificationFormative', 'acClassificationSummative');
-            row.classList.add('acClassificationNone');
-            if (selectEl.value === 'formative') {
-                row.classList.remove('acClassificationNone');
-                row.classList.add('acClassificationFormative');
-            } else if (selectEl.value === 'summative') {
-                row.classList.remove('acClassificationNone');
-                row.classList.add('acClassificationSummative');
-            }
-        };
-
-        if (checkAll) {
-            checkAll.addEventListener('change', function () {
-                boxes().forEach(function (box) {
-                    box.checked = !!checkAll.checked;
-                });
-                updateCheckAllState();
-            });
-        }
-
-        boxes().forEach(function (box) {
-            box.addEventListener('change', updateCheckAllState);
-        });
-        updateCheckAllState();
-
-        classificationSelects.forEach(function (selectEl) {
-            updateClassificationStyle(selectEl);
-            selectEl.addEventListener('change', function () {
-                updateClassificationStyle(selectEl);
-            });
-        });
-
-        updatePreview('staffEventFormat', 'acStaffEventFormatPreview');
-        updatePreview('assessmentDisplayBasis', 'acAssessmentDisplayBasisPreview');
-    })();
+    window.AcademicCalendarModule.initSettingsManage({
+        classificationStyles: <?= json_encode($assessmentClassificationStyles, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?> || {},
+        deleteConfirm: '<?= htmlspecialchars(__('Are you sure you want to delete this record?').' '.__('This operation cannot be undone.'), ENT_QUOTES, 'UTF-8'); ?>',
+        previewTargets: [
+            { selectName: 'assessmentDisplayBasis', previewId: 'acAssessmentDisplayBasisPreview' }
+        ]
+    });
     </script>
     <?php
 }

@@ -1,4 +1,24 @@
 <?php
+/*
+Gibbon: the flexible, open school platform
+Founded by Ross Parker at ICHK Secondary. Built by Ross Parker, Sandra Kuipers and the Gibbon community (https://gibbonedu.org/about/)
+Copyright © 2010, Gibbon Foundation
+Gibbon™, Gibbon Education Ltd. (Hong Kong)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 // USE ;end TO SEPARATE SQL STATEMENTS. DON'T USE ;end IN ANY OTHER PLACES!
 
 $sql = [];
@@ -18,7 +38,7 @@ WHERE NOT EXISTS (
     SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='showHomeworkEvents'
 );end
 INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
-SELECT 'Academic Calendar', 'showAssessmentEvents', 'Show Assessment Events', 'Show markbook assessment events in the Homework Calendar.', 'Y'
+SELECT 'Academic Calendar', 'showAssessmentEvents', 'Show Assessment Events', 'Show markbook assessment events in the Homework Calendar.', 'N'
 WHERE NOT EXISTS (
     SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='showAssessmentEvents'
 );end
@@ -140,23 +160,12 @@ AND type='Parental Dashboard'
 AND options LIKE '%hook_parentalDashboard_homeworkView.php%';end
 ";
 
-// v0.5.02
-$count++;
-$sql[$count][0] = "0.5.02";
-$sql[$count][1] = "
-INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
-SELECT 'Academic Calendar', 'staffEventFormat', 'Homework Format in Staff Calendar', 'Choose how homework titles appear for staff in the calendar. This controls how course, class code, year group, and title are combined.', 'codeTitle'
-WHERE NOT EXISTS (
-    SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='staffEventFormat'
-);end
-";
-
 // v0.5.03
 $count++;
 $sql[$count][0] = "0.5.03";
 $sql[$count][1] = "
 INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
-SELECT 'Academic Calendar', 'overviewWeekNumberMode', 'Overview Week Number Mode', 'Choose whether the summative overview shows calendar weeks or academic weeks.', 'academic'
+SELECT 'Academic Calendar', 'overviewWeekNumberMode', 'Overview Week Number Mode', 'Choose whether the overview shows calendar weeks or academic weeks.', 'academic'
 WHERE NOT EXISTS (
     SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='overviewWeekNumberMode'
 );end
@@ -176,12 +185,12 @@ $count++;
 $sql[$count][0] = "0.6.00";
 $sql[$count][1] = "
 INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
-SELECT 'Academic Calendar', 'assessmentDisplayBasis', 'Assessment Format in Staff Calendar', 'Choose which course field is used when naming assessment events for staff. This also controls how same-day assessment merges are labelled.', 'courseShortName'
+SELECT 'Academic Calendar', 'assessmentDisplayBasis', 'Assessment Format in Staff Calendar', 'Choose which course field is used when naming assessment events for staff. This also controls how same-day assessment merges are labelled.', 'classCode'
 WHERE NOT EXISTS (
     SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='assessmentDisplayBasis'
 );end
 INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
-SELECT 'Academic Calendar', 'mergeSameDayAssessments', 'Merge Same-Day Assessments', 'Merge assessment rows that share the same display value on the same day.', 'N'
+SELECT 'Academic Calendar', 'mergeSameDayAssessments', 'Merge Same-Day Assessments', 'Merge assessment rows that share the same display value on the same day in the calendar and overview.', 'N'
 WHERE NOT EXISTS (
     SELECT 1 FROM gibbonSetting WHERE scope='Academic Calendar' AND name='mergeSameDayAssessments'
 );end
@@ -197,4 +206,55 @@ WHERE NOT EXISTS (
 );end
 DELETE FROM gibbonSetting
 WHERE scope='Academic Calendar' AND name='assessmentColorPriority';end
+";
+
+// v1.0.00
+$count++;
+$sql[$count][0] = "1.0.00";
+$sql[$count][1] = "
+UPDATE gibbonSetting
+SET nameDisplay='Default Assessment Filter',
+    description='Default user filter for assessment classifications.',
+    value=CASE
+        WHEN value IS NULL OR value='' THEN '{\"formative\":\"Y\",\"summative\":\"Y\",\"none\":\"Y\"}'
+        ELSE value
+    END
+WHERE scope='Academic Calendar' AND name='defaultAssessmentFilter';end
+DELETE FROM gibbonSetting
+WHERE scope='Academic Calendar' AND name='staffEventFormat';end
+UPDATE gibbonSetting
+SET description='Merge assessment rows that share the same display value on the same day in the calendar and overview.'
+WHERE scope='Academic Calendar' AND name='mergeSameDayAssessments';end
+UPDATE gibbonSetting
+SET nameDisplay='Default Overview Weekly Threshold'
+WHERE scope='Academic Calendar' AND name='summativeWeeklyThresholdDefault';end
+UPDATE gibbonSetting
+SET nameDisplay='Overview Threshold by Year Group'
+WHERE scope='Academic Calendar' AND name='summativeWeeklyThresholdByYearGroup';end
+UPDATE gibbonSetting
+SET description='Choose whether the overview shows calendar weeks or academic weeks.'
+WHERE scope='Academic Calendar' AND name='overviewWeekNumberMode';end
+UPDATE gibbonAction
+SET name='Assessment Overview',
+    description='View weekly assessment overview by year group.'
+WHERE gibbonModuleID=(SELECT gibbonModuleID FROM gibbonModule WHERE name='Academic Calendar')
+AND name='Summative Assessment Overview';end
+UPDATE gibbonSetting
+SET nameDisplay='Calendar Event Display Basis',
+    description='Choose which course field is used when naming homework and assessment events in the calendar.',
+    value=CASE
+        WHEN value IS NULL OR value='' THEN 'classCode'
+        ELSE value
+    END
+WHERE scope='Academic Calendar' AND name='assessmentDisplayBasis';end
+UPDATE gibbonSetting
+SET nameDisplay='Assessment Classification Metadata',
+    description='JSON map of assessment classification labels, colours, and overview display metadata.',
+    value='{\"formative\":{\"label\":\"Formative\",\"color\":\"#F97316\",\"displayInOverview\":\"N\"},\"summative\":{\"label\":\"Summative\",\"color\":\"#1D4ED8\",\"displayInOverview\":\"Y\"},\"none\":{\"label\":\"Not Classified\",\"color\":\"#9CA3AF\",\"displayInOverview\":\"N\"}}'
+WHERE scope='Academic Calendar' AND name='assessmentClassificationColors'
+  AND (value IS NULL OR value='' OR value NOT LIKE '%\"label\"%');end
+UPDATE gibbonSetting
+SET nameDisplay='Override and Use Assessment Classification Colour in Calendar',
+    description='When enabled, assessment events on the Homework/Assessment Calendar use assessment classification colours.'
+WHERE scope='Academic Calendar' AND name='useAssessmentClassificationColorInCalendar';end
 ";

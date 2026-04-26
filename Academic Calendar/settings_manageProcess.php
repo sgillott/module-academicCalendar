@@ -1,4 +1,23 @@
 <?php
+/*
+Gibbon: the flexible, open school platform
+Founded by Ross Parker at ICHK Secondary. Built by Ross Parker, Sandra Kuipers and the Gibbon community (https://gibbonedu.org/about/)
+Copyright © 2010, Gibbon Foundation
+Gibbon™, Gibbon Education Ltd. (Hong Kong)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 
 use Gibbon\Domain\System\SettingGateway;
 
@@ -27,24 +46,99 @@ $showWeekends = $showWeekends === 'N' ? 'N' : 'Y';
 $showHomeworkEvents = (string) ($_POST['showHomeworkEvents'] ?? 'Y');
 $showHomeworkEvents = $showHomeworkEvents === 'N' ? 'N' : 'Y';
 
-$showAssessmentEvents = (string) ($_POST['showAssessmentEvents'] ?? 'Y');
+$showAssessmentEvents = (string) ($_POST['showAssessmentEvents'] ?? 'N');
 $showAssessmentEvents = $showAssessmentEvents === 'N' ? 'N' : 'Y';
 
 $defaultStaffView = (string) ($_POST['defaultStaffView'] ?? 'all');
 $defaultStaffView = $defaultStaffView === 'yearGroup' ? 'yearGroup' : 'all';
-$staffEventFormat = ac_normalizeStaffEventFormat((string) ($_POST['staffEventFormat'] ?? 'codeTitle'));
-$assessmentDisplayBasis = ac_normalizeAssessmentDisplayBasis((string) ($_POST['assessmentDisplayBasis'] ?? 'courseShortName'));
+$assessmentDisplayBasis = ac_normalizeAssessmentDisplayBasis((string) ($_POST['assessmentDisplayBasis'] ?? 'classCode'));
 $mergeSameDayAssessments = ac_normalizeYesNo((string) ($_POST['mergeSameDayAssessments'] ?? 'N'));
 $useAssessmentClassificationColorInCalendar = ac_normalizeYesNo((string) ($_POST['useAssessmentClassificationColorInCalendar'] ?? 'N'));
+$addAssessmentClassification = (string) ($_POST['addAssessmentClassification'] ?? '') === 'Y';
+
+$currentClassificationDefinitions = ac_getAssessmentClassificationDefinitions($settingGateway);
+$assessmentClassificationDefinitions = [];
+$postedClassificationLabels = $_POST['assessmentClassificationLabel'] ?? [];
+if (!is_array($postedClassificationLabels)) {
+    $postedClassificationLabels = [];
+}
+$postedClassificationColors = $_POST['assessmentClassificationColor'] ?? [];
+if (!is_array($postedClassificationColors)) {
+    $postedClassificationColors = [];
+}
+$postedClassificationOverview = $_POST['assessmentClassificationDisplayInOverview'] ?? [];
+if (!is_array($postedClassificationOverview)) {
+    $postedClassificationOverview = [];
+}
+$postedClassificationDeletes = $_POST['assessmentClassificationDelete'] ?? [];
+if (!is_array($postedClassificationDeletes)) {
+    $postedClassificationDeletes = [];
+}
+$deleteAssessmentClassification = ac_normalizeAssessmentClassificationKey((string) ($_POST['deleteAssessmentClassification'] ?? ''));
+if ($deleteAssessmentClassification !== '' && $deleteAssessmentClassification !== 'none') {
+    $postedClassificationDeletes[$deleteAssessmentClassification] = 'Y';
+}
+
+foreach (array_keys($postedClassificationLabels) as $rawKey) {
+    $key = ac_normalizeAssessmentClassificationKey((string) $rawKey);
+    if ($key === '' || $key === 'none' || isset($postedClassificationDeletes[$key])) {
+        continue;
+    }
+
+    $label = trim((string) ($postedClassificationLabels[$key] ?? ($currentClassificationDefinitions[$key]['label'] ?? '')));
+    $color = ac_normalizeHexColor((string) ($postedClassificationColors[$key] ?? ($currentClassificationDefinitions[$key]['color'] ?? '')));
+    if ($label === '' || $color === null) {
+        continue;
+    }
+
+    $assessmentClassificationDefinitions[$key] = [
+        'label' => $label,
+        'color' => $color,
+        'locked' => false,
+        'displayInOverview' => in_array($key, $postedClassificationOverview, true) ? 'Y' : 'N',
+    ];
+}
+
+$newClassificationKeys = [];
+if ($addAssessmentClassification) {
+    $baseLabel = __('New Classification');
+    $baseKey = 'new_classification';
+    $key = $baseKey;
+    $suffix = 2;
+    while (isset($assessmentClassificationDefinitions[$key])) {
+        $key = $baseKey.'_'.$suffix;
+        $suffix++;
+    }
+
+    $label = $baseLabel;
+    if ($suffix > 2) {
+        $label .= ' '.($suffix - 1);
+    }
+
+    $assessmentClassificationDefinitions[$key] = [
+        'label' => $label,
+        'color' => '#64748B',
+        'locked' => false,
+        'displayInOverview' => 'N',
+    ];
+    $newClassificationKeys[$key] = true;
+}
+
+$assessmentClassificationDefinitions['none'] = [
+    'label' => 'Not Classified',
+    'color' => ac_normalizeHexColor((string) ($postedClassificationColors['none'] ?? ($currentClassificationDefinitions['none']['color'] ?? ''))) ?? '#9CA3AF',
+    'locked' => true,
+    'displayInOverview' => 'N',
+];
+
 $defaultAssessmentFilterPosted = $_POST['defaultAssessmentFilter'] ?? [];
 if (!is_array($defaultAssessmentFilterPosted)) {
     $defaultAssessmentFilterPosted = [];
 }
-$defaultAssessmentFilter = [
-    'formative' => in_array('formative', $defaultAssessmentFilterPosted, true) ? 'Y' : 'N',
-    'summative' => in_array('summative', $defaultAssessmentFilterPosted, true) ? 'Y' : 'N',
-    'none' => in_array('none', $defaultAssessmentFilterPosted, true) ? 'Y' : 'N',
-];
+$defaultAssessmentFilter = [];
+foreach (array_keys($assessmentClassificationDefinitions) as $key) {
+    $defaultAssessmentFilter[$key] = in_array($key, $defaultAssessmentFilterPosted, true) || isset($newClassificationKeys[$key]) ? 'Y' : 'N';
+}
 $enabledYearGroups = $_POST['gibbonYearGroupIDList'] ?? [];
 if (!is_array($enabledYearGroups)) {
     $enabledYearGroups = [];
@@ -58,11 +152,6 @@ if ($summativeWeeklyThresholdDefault === '' || !ctype_digit($summativeWeeklyThre
     $summativeWeeklyThresholdDefault = '3';
 }
 $overviewWeekNumberMode = ac_normalizeOverviewWeekNumberMode((string) ($_POST['overviewWeekNumberMode'] ?? 'academic'));
-$assessmentClassificationColors = ac_decodeAssessmentClassificationColors(json_encode([
-    'formative' => (string) ($_POST['assessmentClassificationColor_formative'] ?? ''),
-    'summative' => (string) ($_POST['assessmentClassificationColor_summative'] ?? ''),
-    'none' => (string) ($_POST['assessmentClassificationColor_none'] ?? ''),
-]));
 $postedThresholdByYearGroup = $_POST['summativeWeeklyThresholdByYearGroup'] ?? [];
 if (!is_array($postedThresholdByYearGroup)) {
     $postedThresholdByYearGroup = [];
@@ -89,23 +178,7 @@ foreach ($postedThresholdByYearGroup as $yearGroupID => $threshold) {
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'showWeekends', $showWeekends) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'defaultStaffView', $defaultStaffView) || $partialFail;
 
-$staffEventFormatSetting = $settingGateway->getSettingByScope('Academic Calendar', 'staffEventFormat', true);
-if (empty($staffEventFormatSetting)) {
-    $insertSuccess = $pdo->statement(
-        "INSERT INTO gibbonSetting (scope, name, nameDisplay, description, value)
-         VALUES (:scope, :name, :nameDisplay, :description, :value)",
-        [
-            'scope' => 'Academic Calendar',
-            'name' => 'staffEventFormat',
-            'nameDisplay' => 'Homework Format in Staff Calendar',
-            'description' => 'Choose how homework titles appear for staff in the calendar. This controls how course, class code, year group, and title are combined.',
-            'value' => 'codeTitle',
-        ]
-    );
-    $partialFail = !$insertSuccess || $partialFail;
-}
-
-// Backward compatibility: ensure settings added in later versions exist on already-installed modules.
+// Ensure settings added in later versions exist on already-installed local modules.
 $homeworkSetting = $settingGateway->getSettingByScope('Academic Calendar', 'showHomeworkEvents', true);
 if (empty($homeworkSetting)) {
     $insertSuccess = $pdo->statement(
@@ -132,7 +205,7 @@ if (empty($assessmentSetting)) {
             'name' => 'showAssessmentEvents',
             'nameDisplay' => 'Show Assessment Events on Calendar',
             'description' => 'Show markbook assessment events in the Homework Calendar.',
-            'value' => 'Y',
+            'value' => 'N',
         ]
     );
     $partialFail = !$insertSuccess || $partialFail;
@@ -163,7 +236,7 @@ if (empty($defaultAssessmentFilterSetting)) {
             'scope' => 'Academic Calendar',
             'name' => 'defaultAssessmentFilter',
             'nameDisplay' => 'Default Assessment Filter',
-            'description' => 'Default user filter for formative and summative assessment events.',
+            'description' => 'Default user filter for assessment classifications.',
             'value' => '{"formative":"Y","summative":"Y","none":"Y"}',
         ]
     );
@@ -194,7 +267,7 @@ if (empty($defaultThresholdSetting)) {
         [
             'scope' => 'Academic Calendar',
             'name' => 'summativeWeeklyThresholdDefault',
-            'nameDisplay' => 'Default Summative Weekly Threshold',
+            'nameDisplay' => 'Default Overview Weekly Threshold',
             'description' => 'Fallback threshold used when a year group does not have its own setting.',
             'value' => '3',
         ]
@@ -210,7 +283,7 @@ if (empty($thresholdByYearGroupSetting)) {
         [
             'scope' => 'Academic Calendar',
             'name' => 'summativeWeeklyThresholdByYearGroup',
-            'nameDisplay' => 'Summative Weekly Threshold by Year Group',
+            'nameDisplay' => 'Overview Threshold by Year Group',
             'description' => 'JSON map of gibbonYearGroupID to weekly threshold.',
             'value' => '{}',
         ]
@@ -227,7 +300,7 @@ if (empty($overviewWeekNumberModeSetting)) {
             'scope' => 'Academic Calendar',
             'name' => 'overviewWeekNumberMode',
             'nameDisplay' => 'Overview Week Number Mode',
-            'description' => 'Choose whether the summative overview shows calendar weeks or academic weeks.',
+            'description' => 'Choose whether the overview shows calendar weeks or academic weeks.',
             'value' => 'academic',
         ]
     );
@@ -242,9 +315,9 @@ if (empty($assessmentDisplayBasisSetting)) {
         [
             'scope' => 'Academic Calendar',
             'name' => 'assessmentDisplayBasis',
-            'nameDisplay' => 'Assessment Format in Staff Calendar',
-            'description' => 'Choose which course field is used when naming assessment events for staff. This also controls how same-day assessment merges are labelled.',
-            'value' => 'courseShortName',
+            'nameDisplay' => 'Calendar Event Display Basis',
+            'description' => 'Choose which course field is used when naming homework and assessment events in the calendar.',
+            'value' => 'classCode',
         ]
     );
     $partialFail = !$insertSuccess || $partialFail;
@@ -259,7 +332,7 @@ if (empty($mergeSameDayAssessmentsSetting)) {
             'scope' => 'Academic Calendar',
             'name' => 'mergeSameDayAssessments',
             'nameDisplay' => 'Merge Same-Day Assessments',
-            'description' => 'Merge assessment rows that share the same display value on the same day.',
+            'description' => 'Merge assessment rows that share the same display value on the same day in the calendar and overview.',
             'value' => 'N',
         ]
     );
@@ -274,9 +347,9 @@ if (empty($assessmentClassificationColorsSetting)) {
         [
             'scope' => 'Academic Calendar',
             'name' => 'assessmentClassificationColors',
-            'nameDisplay' => 'Assessment Classification Colours',
-            'description' => 'JSON map of formative, summative, and not classified colours.',
-            'value' => json_encode(ac_getDefaultAssessmentClassificationColors()),
+            'nameDisplay' => 'Assessment Classification Metadata',
+            'description' => 'JSON map of assessment classification labels, colours, and overview display metadata.',
+            'value' => json_encode(ac_encodeAssessmentClassificationDefinitions(ac_getDefaultAssessmentClassificationDefinitions())),
         ]
     );
     $partialFail = !$insertSuccess || $partialFail;
@@ -290,8 +363,8 @@ if (empty($useAssessmentClassificationColorInCalendarSetting)) {
         [
             'scope' => 'Academic Calendar',
             'name' => 'useAssessmentClassificationColorInCalendar',
-            'nameDisplay' => 'Use Assessment Classification Colour in Calendar',
-            'description' => 'When enabled, assessment events on the Homework/Assessment Calendar use the formative, summative, or not classified colours.',
+            'nameDisplay' => 'Override and Use Assessment Classification Colour in Calendar',
+            'description' => 'When enabled, assessment events on the Homework/Assessment Calendar use assessment classification colours.',
             'value' => 'N',
         ]
     );
@@ -301,14 +374,13 @@ if (empty($useAssessmentClassificationColorInCalendarSetting)) {
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'showHomeworkEvents', $showHomeworkEvents) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'showAssessmentEvents', $showAssessmentEvents) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'defaultAssessmentFilter', json_encode($defaultAssessmentFilter)) || $partialFail;
-$partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'staffEventFormat', $staffEventFormat) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'gibbonYearGroupIDList', $enabledYearGroupIDList) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'summativeWeeklyThresholdDefault', $summativeWeeklyThresholdDefault) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'summativeWeeklyThresholdByYearGroup', json_encode($summativeWeeklyThresholdByYearGroup)) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'overviewWeekNumberMode', $overviewWeekNumberMode) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'assessmentDisplayBasis', $assessmentDisplayBasis) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'mergeSameDayAssessments', $mergeSameDayAssessments) || $partialFail;
-$partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'assessmentClassificationColors', json_encode($assessmentClassificationColors)) || $partialFail;
+$partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'assessmentClassificationColors', json_encode(ac_encodeAssessmentClassificationDefinitions($assessmentClassificationDefinitions))) || $partialFail;
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'useAssessmentClassificationColorInCalendar', $useAssessmentClassificationColorInCalendar) || $partialFail;
 
 $types = $pdo->select("
@@ -345,8 +417,8 @@ foreach ($types as $type) {
     }
 
     $visible = isset($postedVisible[$hash]) && (string) $postedVisible[$hash] === 'Y' ? 'Y' : 'N';
-    $classification = strtolower(trim((string) ($postedClassifications[$hash] ?? '')));
-    if (!in_array($classification, ['', 'formative', 'summative'], true)) {
+    $classification = ac_normalizeAssessmentClassificationKey((string) ($postedClassifications[$hash] ?? ''));
+    if ($classification === 'none' || !isset($assessmentClassificationDefinitions[$classification])) {
         $classification = '';
     }
     $meta[$type] = [
@@ -359,4 +431,7 @@ $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'even
 $partialFail = !$settingGateway->updateSettingByScope('Academic Calendar', 'eventTypeMeta', json_encode($meta)) || $partialFail;
 
 $URL .= $partialFail ? '&return=error2' : '&return=success0';
+if ($addAssessmentClassification) {
+    $URL .= '#acClassificationManageTable';
+}
 header("Location: {$URL}");

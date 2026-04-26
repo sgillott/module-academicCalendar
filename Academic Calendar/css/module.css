@@ -43,28 +43,46 @@
 #academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.fc-daygrid-dot-event {
     border-style: solid !important;
     border-width: 2px !important;
+    box-shadow: none !important;
 }
 
-#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-formative,
-#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-formative.fc-daygrid-block-event,
-#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-formative.fc-daygrid-dot-event {
-    border-color: var(--acClassificationFormativeBorder, #f97316) !important;
+#academicCalendar .fc .ac-event-assessment .fc-event-main {
+    border: 0 !important;
+    border-width: 0 !important;
+    box-shadow: none !important;
 }
 
-#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-summative,
-#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-summative.fc-daygrid-block-event,
-#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-summative.fc-daygrid-dot-event {
-    border-color: var(--acClassificationSummativeBorder, #1d4ed8) !important;
+#academicCalendar .fc a.fc-event,
+#academicCalendar .fc a.fc-event:link,
+#academicCalendar .fc a.fc-event:visited,
+#academicCalendar .fc a.fc-event:hover,
+#academicCalendar .fc a.fc-event:focus {
+    color: inherit;
+    text-decoration: none;
 }
 
-#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-none,
-#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-none.fc-daygrid-block-event,
-#academicCalendar .fc .ac-event-assessment.ac-event-assessment-classification-color.ac-event-assessment-none.fc-daygrid-dot-event {
-    border-color: var(--acClassificationNoneBorder, #9ca3af) !important;
+#academicCalendar .fc .ac-event-homework,
+#academicCalendar .fc .ac-event-homework:visited,
+#academicCalendar .fc .ac-event-homework:hover,
+#academicCalendar .fc .ac-event-homework:focus {
+    color: #111827 !important;
 }
 
 #academicCalendar .fc .ac-event-homework .fc-event-title {
     font-weight: 600;
+}
+
+#academicCalendar .fc .ac-event-homework,
+#academicCalendar .fc .ac-event-homework .fc-event-main,
+#academicCalendar .fc .ac-event-homework .fc-event-main-frame,
+#academicCalendar .fc .ac-event-homework .fc-event-title,
+#academicCalendar .fc .ac-event-homework .fc-event-time,
+#academicCalendar .fc .ac-event-homework .fc-daygrid-event-dot,
+#academicCalendar .fc .ac-event-homework.fc-daygrid-dot-event,
+#academicCalendar .fc .ac-event-homework.fc-daygrid-dot-event:hover,
+#academicCalendar .fc .ac-event-homework.fc-daygrid-dot-event:focus,
+#academicCalendar .fc .ac-event-homework .fc-list-event-title a {
+    color: #111827 !important;
 }
 
 #academicCalendar .fc .ac-event-homework.fc-daygrid-dot-event .fc-event-title,
@@ -135,31 +153,13 @@ input.acEventTypeVisible[type="checkbox"] {
     margin-right: 0;
 }
 
-#acEventTypesTable tr.acClassificationNone td {
-    background-color: var(--acClassificationNoneHighlight, #fafafa);
+#acEventTypesTable .acEventTypeRow td {
+    background-color: var(--acClassificationHighlight, transparent);
 }
 
-#acEventTypesTable tr.acClassificationFormative td {
-    background-color: var(--acClassificationFormativeHighlight, #fff7ed);
-}
-
-#acEventTypesTable tr.acClassificationSummative td {
-    background-color: var(--acClassificationSummativeHighlight, #eff6ff);
-}
-
-#acEventTypesTable tr.acClassificationNone select[name^="typeClassification["] {
-    border-color: var(--acClassificationNoneBorder, #9ca3af);
-    border-width: 2px;
-}
-
-#acEventTypesTable tr.acClassificationFormative select[name^="typeClassification["] {
-    border-color: var(--acClassificationFormativeBorder, #f97316);
-    border-width: 2px;
-}
-
-#acEventTypesTable tr.acClassificationSummative select[name^="typeClassification["] {
-    border-color: var(--acClassificationSummativeBorder, #1d4ed8);
-    border-width: 2px;
+#acEventTypesTable .acEventTypeRow select[name^="typeClassification["] {
+    border-color: var(--acClassificationBorder, initial);
+    border-width: var(--acClassificationBorderWidth, 1px);
 }
 
 .acAssessmentFilterRow {
@@ -194,20 +194,9 @@ input.acEventTypeVisible[type="checkbox"] {
 .acAssessmentFilterCheckbox {
     margin: 0;
     accent-color: #6b7280;
+    outline: 2px solid var(--acFilterColor, #6b7280);
     outline-offset: 1px;
     border-radius: 3px;
-}
-
-.acAssessmentFilterCheckboxFormative {
-    outline: 2px solid var(--acClassificationFormativeBorder, #f97316);
-}
-
-.acAssessmentFilterCheckboxSummative {
-    outline: 2px solid var(--acClassificationSummativeBorder, #1d4ed8);
-}
-
-.acAssessmentFilterCheckboxNone {
-    outline: 2px solid var(--acClassificationNoneBorder, #9ca3af);
 }
 
 #academicCalendar .fc .fc-daygrid-day-top {
@@ -233,7 +222,10 @@ input.acEventTypeVisible[type="checkbox"] {
     border-radius: 9999px;
     font-weight: 700;
     line-height: 1.25;
+    font-size: 0.82em;
     margin-right: 0.1rem;
+    background-color: var(--acYearGroupBackground, transparent);
+    color: var(--acYearGroupText, inherit);
 }
 
 #academicCalendar .fc .fc-daygrid-block-event .fc-event-main {
@@ -274,6 +266,7 @@ input.acEventTypeVisible[type="checkbox"] {
 .acOverviewTable {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
     font-size: 0.92rem;
 }
 
@@ -289,6 +282,14 @@ input.acEventTypeVisible[type="checkbox"] {
     font-weight: 600;
     text-align: left;
     white-space: nowrap;
+}
+
+.acOverviewWeekColumn {
+    background: #fefce8;
+}
+
+.acOverviewSchoolEventsColumn {
+    background: #faf7f2;
 }
 
 .acOverviewWeekNumber {
@@ -381,10 +382,6 @@ input.acEventTypeVisible[type="checkbox"] {
     min-width: 180px;
 }
 
-.acOverviewFieldCheckbox {
-    padding-bottom: 7px;
-}
-
 .acOverviewFieldButton {
     padding-bottom: 4px;
 }
@@ -404,20 +401,13 @@ input.acEventTypeVisible[type="checkbox"] {
     background: #111827;
 }
 
-.acOverviewCheckbox {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 0;
-}
-
 .acOverviewWeekClosure td {
     background: #dbeafe !important;
 }
 
 .acOverviewSubjectsCell {
     vertical-align: top;
-    min-width: 120px;
+    min-width: 0;
     box-shadow: inset 0 0 0 1px #cbd5e1;
 }
 
@@ -437,7 +427,6 @@ input.acEventTypeVisible[type="checkbox"] {
 }
 
 .acOverviewSubjectLine {
-    position: relative;
     display: block;
     width: 100%;
     box-sizing: border-box;
@@ -453,13 +442,13 @@ input.acEventTypeVisible[type="checkbox"] {
     cursor: help;
 }
 
-.acOverviewSubjectLine[data-tooltip]:hover::after,
-.acOverviewSubjectLine[data-tooltip]:focus-visible::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    left: 0;
-    top: calc(100% + 6px);
-    z-index: 50;
+.acOverviewSubjectLine:last-child {
+    margin-bottom: 0;
+}
+
+.acOverviewTooltip {
+    position: fixed;
+    z-index: 1200;
     min-width: 220px;
     max-width: 360px;
     padding: 8px 10px;
@@ -474,19 +463,24 @@ input.acEventTypeVisible[type="checkbox"] {
     pointer-events: none;
 }
 
-.acOverviewSubjectLine[data-tooltip]:hover::before,
-.acOverviewSubjectLine[data-tooltip]:focus-visible::before {
-    content: "";
-    position: absolute;
-    left: 14px;
-    top: calc(100% + 1px);
-    z-index: 51;
-    border-width: 6px;
-    border-style: solid;
-    border-color: transparent transparent rgba(17, 24, 39, 0.96) transparent;
-    pointer-events: none;
+.acSettingsPreview {
+    display: inline-block;
+    min-width: 28rem;
+    max-width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    background: #f8fafc;
+    color: #1f2937;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: pre-line;
 }
 
-.acOverviewSubjectLine:last-child {
-    margin-bottom: 0;
+.acClassificationManageTable {
+    margin-bottom: 0.75rem;
+}
+
+.acClassificationManageTable input[type="text"] {
+    max-width: 18rem;
 }

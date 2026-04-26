@@ -1,4 +1,23 @@
 <?php
+/*
+Gibbon: the flexible, open school platform
+Founded by Ross Parker at ICHK Secondary. Built by Ross Parker, Sandra Kuipers and the Gibbon community (https://gibbonedu.org/about/)
+Copyright © 2010, Gibbon Foundation
+Gibbon™, Gibbon Education Ltd. (Hong Kong)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 
 use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Domain\School\YearGroupGateway;
@@ -42,28 +61,13 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
     $defaultStaffView = (string) $settingGateway->getSettingByScope('Academic Calendar', 'defaultStaffView');
     $enabledYearGroupIDs = ac_getEnabledYearGroupIDs($settingGateway);
     $eventTypeMeta = ac_getEventTypeMeta($settingGateway);
+    $assessmentClassificationDefinitions = ac_getAssessmentClassificationDefinitions($settingGateway);
     $defaultAssessmentFilter = ac_getDefaultAssessmentFilter($settingGateway);
-    $assessmentClassificationColors = ac_getAssessmentClassificationColors($settingGateway);
+    $assessmentClassificationColors = array_map(function ($definition) {
+        return (string) $definition['color'];
+    }, $assessmentClassificationDefinitions);
     $assessmentClassificationStyles = ac_buildAssessmentClassificationStyles($assessmentClassificationColors);
-    $availableAssessmentClassifications = ac_getAvailableAssessmentClassifications($eventTypeMeta, true);
-    $showAssessmentFilterOptions = $showAssessmentEvents
-        && ($availableAssessmentClassifications['formative'] || $availableAssessmentClassifications['summative'] || $availableAssessmentClassifications['none']);
-
-    $assessmentFormative = strtoupper((string) ($_GET['assessmentFormative'] ?? $defaultAssessmentFilter['formative']));
-    $assessmentSummative = strtoupper((string) ($_GET['assessmentSummative'] ?? $defaultAssessmentFilter['summative']));
-    $assessmentNone = strtoupper((string) ($_GET['assessmentNone'] ?? $defaultAssessmentFilter['none']));
-    $assessmentFormative = $assessmentFormative === 'N' ? 'N' : 'Y';
-    $assessmentSummative = $assessmentSummative === 'N' ? 'N' : 'Y';
-    $assessmentNone = $assessmentNone === 'N' ? 'N' : 'Y';
-    if (!$availableAssessmentClassifications['formative']) {
-        $assessmentFormative = 'N';
-    }
-    if (!$availableAssessmentClassifications['summative']) {
-        $assessmentSummative = 'N';
-    }
-    if (!$availableAssessmentClassifications['none']) {
-        $assessmentNone = 'N';
-    }
+    $availableAssessmentClassifications = ac_getAvailableAssessmentClassifications($eventTypeMeta, $assessmentClassificationDefinitions, true);
 
     $yearGroupID = '';
     $yearGroups = [];
@@ -134,6 +138,75 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
         $viewType = '';
     }
 
+    $calendarWindow = ac_getCalendarViewWindow($viewDate, $viewType, $firstDay);
+    $assessmentRowsForFilters = [];
+    if ($showAssessmentEvents) {
+        if ($roleCategory === 'Student') {
+            $assessmentRowsForFilters = $eventGateway->selectStudentAssessmentEvents(
+                $gibbonSchoolYearID,
+                $gibbonPersonID,
+                $calendarWindow['start'],
+                $calendarWindow['end']
+            );
+        } elseif ($roleCategory === 'Parent' && $childPersonID !== '') {
+            $assessmentRowsForFilters = $eventGateway->selectParentAssessmentEvents(
+                $gibbonSchoolYearID,
+                $gibbonPersonID,
+                $childPersonID,
+                $calendarWindow['start'],
+                $calendarWindow['end']
+            );
+        } elseif ($roleCategory === 'Staff') {
+            $assessmentRowsForFilters = $eventGateway->selectStaffAssessmentEvents(
+                $gibbonSchoolYearID,
+                $calendarWindow['start'],
+                $calendarWindow['end'],
+                $yearGroupID !== '' ? $yearGroupID : null
+            );
+        }
+
+        $assessmentRowsForFilters = ac_filterEventRowsByEnabledYearGroups($assessmentRowsForFilters, $enabledYearGroupIDs);
+    }
+
+    $hasVisibleUnclassifiedAssessmentEvents = false;
+    foreach ($assessmentRowsForFilters as $assessmentRow) {
+        $type = trim((string) ($assessmentRow['assessmentType'] ?? ''));
+        if ($type === '') {
+            $type = __('Assessment');
+        }
+
+        $meta = $eventTypeMeta[$type] ?? null;
+        if (is_array($meta) && (($meta['visible'] ?? 'Y') === 'N')) {
+            continue;
+        }
+
+        $classification = is_array($meta) ? (string) ($meta['classification'] ?? '') : '';
+        if ($classification === '' || !isset($assessmentClassificationDefinitions[$classification])) {
+            $hasVisibleUnclassifiedAssessmentEvents = true;
+            break;
+        }
+    }
+    $availableAssessmentClassifications['none'] = $hasVisibleUnclassifiedAssessmentEvents;
+    $showAssessmentFilterOptions = $showAssessmentEvents && in_array(true, $availableAssessmentClassifications, true);
+
+    $assessmentFilterSource = [];
+    if (isset($_GET['assessmentFilter']) && is_array($_GET['assessmentFilter'])) {
+        $assessmentFilterSource = $_GET['assessmentFilter'];
+    } else {
+        foreach (array_keys($assessmentClassificationDefinitions) as $key) {
+            $legacyName = 'assessment'.str_replace(' ', '', ucwords(str_replace('_', ' ', $key)));
+            if (isset($_GET[$legacyName])) {
+                $assessmentFilterSource[$key] = $_GET[$legacyName];
+            }
+        }
+    }
+    $assessmentFilterState = ac_normalizeAssessmentFilterState($assessmentClassificationDefinitions, $assessmentFilterSource, $defaultAssessmentFilter);
+    foreach ($availableAssessmentClassifications as $key => $available) {
+        if (!$available) {
+            $assessmentFilterState[$key] = 'N';
+        }
+    }
+
     $i18n = $session->get('i18n');
     $direction = ($i18n['rtl'] ?? 'N') === 'Y' ? 'rtl' : 'ltr';
     $localeFull = strtolower(str_replace('_', '-', $i18n['code'] ?? 'en'));
@@ -173,9 +246,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
             echo '<input type="hidden" name="embed" value="1">';
         }
         if ($showAssessmentFilterOptions) {
-            echo '<input type="hidden" name="assessmentFormative" value="'.htmlspecialchars($assessmentFormative).'">';
-            echo '<input type="hidden" name="assessmentSummative" value="'.htmlspecialchars($assessmentSummative).'">';
-            echo '<input type="hidden" name="assessmentNone" value="'.htmlspecialchars($assessmentNone).'">';
+            foreach ($assessmentFilterState as $key => $value) {
+                echo '<input type="hidden" name="assessmentFilter['.htmlspecialchars($key).']" value="'.htmlspecialchars($value).'">';
+            }
         }
         echo '<label for="yearGroupID"><strong>'.__('Year Group').':</strong></label> ';
         echo '<select id="yearGroupID" name="yearGroupID" onchange="window.acSubmitCalendarFilters(this.form)">';
@@ -199,9 +272,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
             echo '<input type="hidden" name="embed" value="1">';
         }
         if ($showAssessmentFilterOptions) {
-            echo '<input type="hidden" name="assessmentFormative" value="'.htmlspecialchars($assessmentFormative).'">';
-            echo '<input type="hidden" name="assessmentSummative" value="'.htmlspecialchars($assessmentSummative).'">';
-            echo '<input type="hidden" name="assessmentNone" value="'.htmlspecialchars($assessmentNone).'">';
+            foreach ($assessmentFilterState as $key => $value) {
+                echo '<input type="hidden" name="assessmentFilter['.htmlspecialchars($key).']" value="'.htmlspecialchars($value).'">';
+            }
         }
         echo '<label for="childPersonID"><strong>'.__('Student').':</strong></label> ';
         echo '<select id="childPersonID" name="childPersonID" onchange="window.acSubmitCalendarFilters(this.form)">';
@@ -229,31 +302,24 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
         if ($childPersonID !== '') {
             echo '<input type="hidden" name="childPersonID" value="'.htmlspecialchars($childPersonID).'">';
         }
-        echo '<input type="hidden" name="assessmentFormative" value="'.htmlspecialchars($assessmentFormative).'">';
-        echo '<input type="hidden" name="assessmentSummative" value="'.htmlspecialchars($assessmentSummative).'">';
-        echo '<input type="hidden" name="assessmentNone" value="'.htmlspecialchars($assessmentNone).'">';
+        foreach ($assessmentFilterState as $key => $value) {
+            echo '<input type="hidden" name="assessmentFilter['.htmlspecialchars($key).']" value="'.htmlspecialchars($value).'">';
+        }
 
         echo '<span class="acAssessmentFilterLabel"><strong>'.__('Assessments').':</strong></span> ';
-        if ($availableAssessmentClassifications['formative']) {
-            echo '<label class="acAssessmentFilterOption"><input type="checkbox" class="acAssessmentFilterCheckbox acAssessmentFilterCheckboxFormative" '.($assessmentFormative === 'Y' ? 'checked ' : '').'onchange="this.form.assessmentFormative.value=this.checked?\'Y\':\'N\'; window.acSubmitCalendarFilters(this.form)"> <span>'.__('Formative').'</span></label> ';
-        }
-        if ($availableAssessmentClassifications['summative']) {
-            echo '<label class="acAssessmentFilterOption"><input type="checkbox" class="acAssessmentFilterCheckbox acAssessmentFilterCheckboxSummative" '.($assessmentSummative === 'Y' ? 'checked ' : '').'onchange="this.form.assessmentSummative.value=this.checked?\'Y\':\'N\'; window.acSubmitCalendarFilters(this.form)"> <span>'.__('Summative').'</span></label>';
-        }
-        if ($availableAssessmentClassifications['none']) {
-            echo '<label class="acAssessmentFilterOption"><input type="checkbox" class="acAssessmentFilterCheckbox acAssessmentFilterCheckboxNone" '.($assessmentNone === 'Y' ? 'checked ' : '').'onchange="this.form.assessmentNone.value=this.checked?\'Y\':\'N\'; window.acSubmitCalendarFilters(this.form)"> <span>'.__('Not Classified').'</span></label>';
+        foreach ($assessmentClassificationDefinitions as $key => $definition) {
+            if (empty($availableAssessmentClassifications[$key])) {
+                continue;
+            }
+            $checked = ($assessmentFilterState[$key] ?? 'Y') === 'Y' ? 'checked ' : '';
+            $label = (string) $definition['label'];
+            $filterColor = ac_normalizeHexColor((string) ($definition['color'] ?? '')) ?? '#9CA3AF';
+            echo '<label class="acAssessmentFilterOption" style="--acFilterColor: '.htmlspecialchars($filterColor).';"><input type="checkbox" class="acAssessmentFilterCheckbox" data-filter-key="'.htmlspecialchars($key).'" '.$checked.'onchange="this.form.elements[\'assessmentFilter['.htmlspecialchars($key).']\'].value=this.checked?\'Y\':\'N\'; window.acSubmitCalendarFilters(this.form)"> <span>'.htmlspecialchars($label).'</span></label> ';
         }
         echo '</form>';
     }
 
     echo '<div id="academicCalendar"></div>';
-    echo '<style>
-        #academicCalendar {
-            --acClassificationNoneBorder: '.htmlspecialchars($assessmentClassificationStyles['none']['border']).';
-            --acClassificationFormativeBorder: '.htmlspecialchars($assessmentClassificationStyles['formative']['border']).';
-            --acClassificationSummativeBorder: '.htmlspecialchars($assessmentClassificationStyles['summative']['border']).';
-        }
-    </style>';
     ?>
     <script src="<?= $session->get('absoluteURL'); ?>/lib/fullcalendar/dist/index.global.min.js"></script>
     <?= !empty($localeFile) ? '<script src="'.$localeFile.'"></script>' : '' ?>
@@ -264,11 +330,14 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
             const isEmbed = <?= $isEmbed ? 'true' : 'false' ?>;
             const params = {
                 yearGroupID: '<?= htmlspecialchars($yearGroupID, ENT_QUOTES); ?>',
-                childPersonID: '<?= htmlspecialchars($childPersonID, ENT_QUOTES); ?>',
-                assessmentFormative: '<?= htmlspecialchars($assessmentFormative, ENT_QUOTES); ?>',
-                assessmentSummative: '<?= htmlspecialchars($assessmentSummative, ENT_QUOTES); ?>',
-                assessmentNone: '<?= htmlspecialchars($assessmentNone, ENT_QUOTES); ?>'
+                childPersonID: '<?= htmlspecialchars($childPersonID, ENT_QUOTES); ?>'
             };
+            Object.assign(params, <?= json_encode(array_combine(
+                array_map(function ($key) {
+                    return 'assessmentFilter['.$key.']';
+                }, array_keys($assessmentFilterState)),
+                array_values($assessmentFilterState)
+            ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?> || {});
             const yearGroupBadgeMap = <?= json_encode($yearGroupBadgeMap, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?> || {};
             const roleCategory = '<?= htmlspecialchars($roleCategory, ENT_QUOTES); ?>';
             let calendar = null;
@@ -411,15 +480,15 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                     }
 
                     const text = (node.textContent || '').trim();
-                    const match = text.match(/^(\([^)]+\))\s+(.*)$/);
+                    const match = text.match(/^(\(([^)]+)\))\s+(.*)$/);
                     if (!match) {
                         return;
                     }
 
-                    node.innerHTML = '<span class="acYearGroupToken" style="background-color: ' + badge.background + '; color: ' + badge.text + ';">'
-                        + match[1]
+                    node.innerHTML = '<span class="acYearGroupToken" style="--acYearGroupBackground: ' + badge.background + '; --acYearGroupText: ' + badge.text + ';">'
+                        + match[2]
                         + '</span> '
-                        + match[2];
+                        + match[3];
                     node.dataset.acYearGroupStyled = 'Y';
                 });
             }
@@ -483,32 +552,17 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                         },
                         eventDidMount: function (info) {
                             const props = info.event.extendedProps || {};
-                            if (props.source === 'Markbook') {
-                                const useClassificationBorder = info.el.classList.contains('ac-event-assessment-classification-color') && info.event.borderColor;
-                                if (useClassificationBorder) {
-                                    info.el.style.borderStyle = 'solid';
-                                    info.el.style.borderWidth = '2px';
-                                    info.el.style.borderColor = info.event.borderColor;
-                                    info.el.style.boxShadow = 'none';
-                                } else {
-                                    info.el.style.border = 'none';
-                                    info.el.style.borderWidth = '0';
-                                    info.el.style.boxShadow = 'none';
-                                }
-
-                                const main = info.el.querySelector('.fc-event-main');
-                                if (main) {
-                                    main.style.border = 'none';
-                                    main.style.borderWidth = '0';
-                                    main.style.boxShadow = 'none';
-                                }
-                            }
                             if (props.source === 'Planner') {
                                 info.el.style.color = '#111827';
 
                                 const main = info.el.querySelector('.fc-event-main');
                                 if (main) {
                                     main.style.color = '#111827';
+                                }
+
+                                const mainFrame = info.el.querySelector('.fc-event-main-frame');
+                                if (mainFrame) {
+                                    mainFrame.style.color = '#111827';
                                 }
 
                                 const title = info.el.querySelector('.fc-event-title');
@@ -549,6 +603,12 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                                 if (lines.length > 0 && lines[lines.length - 1] === '') {
                                     lines.pop();
                                 }
+                            } else if (Array.isArray(props.tooltipLines) && props.tooltipLines.length > 0) {
+                                props.tooltipLines.forEach(function (line) {
+                                    if (line) {
+                                        lines.push(line);
+                                    }
+                                });
                             } else {
                                 if (props.subject) {
                                     lines.push(props.subject);
@@ -558,6 +618,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/Academic Calendar/calenda
                                 }
                                 if (props.description) {
                                     lines.push(props.description);
+                                }
+                                if (props.classLabel) {
+                                    lines.push('<?= htmlspecialchars(__('Class'), ENT_QUOTES); ?>: ' + props.classLabel);
                                 }
                                 if (props.yearGroups) {
                                     lines.push('<?= htmlspecialchars(__('Year Group'), ENT_QUOTES); ?>: ' + props.yearGroups);

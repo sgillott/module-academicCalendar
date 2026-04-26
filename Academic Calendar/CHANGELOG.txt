@@ -1,6 +1,20 @@
 CHANGELOG
 =========
 
+v1.0.00 (2026-04-26)
+--------------------
+- Added dynamic assessment classification metadata with editable labels, colours, and overview visibility.
+- Kept `Not Classified` as a fixed fallback for visible unclassified assessment events.
+- Changed calendar assessment filters to render from configured classifications, and only show `Not Classified` when visible unclassified assessments exist in the current calendar window.
+- Reworked the Assessment Overview to use classifications marked for overview display instead of depending on a fixed `summative` key.
+- Renamed the overview UI from `Summative Assessment Overview` to `Assessment Overview` and updated related threshold wording.
+- Aligned homework and assessment event titles around one shared `Calendar Event Display Basis` setting.
+- Added `Learning Area` support to homework event data and staff homework titles, including year-group pills where applicable.
+- Changed merged staff assessment links to go to the first underlying Markbook edit URL.
+- Added homework class identifiers to calendar tooltips.
+- Refined Manage Settings with configurable assessment classifications, Gibbon-style add/delete actions, and updated preview wording.
+- Updated default install values, upgrade metadata, README documentation for v1.0.00.
+
 v0.7.00 (2026-04-23)
 --------------------
 - Ordered staff calendar events by year-group sequence number.
@@ -68,7 +82,7 @@ v0.3.00 (2026-04-20)
 - Added event-type metadata settings (visibility + assessment classification) in Manage Settings.
 - Cleaned up calendar event CSS to stabilize day-grid layout and prevent right-column overflow.
 
-v0.2.0 (2026-04-19)
+v0.2.00 (2026-04-19)
 --------------------
 - Added Markbook assessment events to the Homework Calendar feed (student, parent, staff).
 - Assessment events are rendered as all-day entries in FullCalendar.
@@ -79,7 +93,7 @@ v0.2.0 (2026-04-19)
 - Updated staff year-group label rendering to prefer short names.
 - Added visual differentiation between homework and assessment events.
 
-v0.1.0 (2026-04-12)
+v0.1.00 (2026-04-12)
 -------------------
 - Initial release of the Academic Calendar module.
 - Added 'Homework Calendar' action for Staff, Students and Parents.
