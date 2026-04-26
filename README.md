@@ -23,17 +23,15 @@ The module provides:
 Academic Calendar can appear as a dashboard hook tab for staff, students, and parents.
 - Staff:
 
-<img src="images/StaffDashboardHook.png" alt="Staff Dashboard Hook" width="50%">
+<img width="50%" alt="Staff Dashboard Hook" src="https://github.com/user-attachments/assets/bdf4ab10-7981-4174-ab9c-fee4697e2ac7" />
 
 - Parents:
 
-<img src="images/ParentDashboardHook.png" alt="Parent Dashboard Hook" width="50%">
+<img width="50%" alt="Parent Dashboard Hook" src="https://github.com/user-attachments/assets/37b9fcc9-16d7-43d0-9742-594b9a7f6ef6" />
 
 - Students:
 
-<img src="images/StudentDashboardHook.png" alt="Student Dashboard Hook" width="50%">
-
-
+<img width="50%" alt="Student Dashboard Hook" src="https://github.com/user-attachments/assets/3e5aa3e3-e9a1-49e5-9419-4e90ba577d8f" />
 
 # Main Pages
 
@@ -51,11 +49,11 @@ Depending on role and permissions, users can:
 - filter by year group in staff view
 - open linked Planner or Markbook pages where access is available
 
-<img src="images/HomeworkAssessmentCalendar.png" alt="Homework/Assessment Calendar" width="50%">
+<img width="50%" alt="Homework/Assessment Calendar" src="https://github.com/user-attachments/assets/838f66a6-60d9-4273-8a78-0821d6289abe" />
 
 The calendar filter and view options are shown here:
 
-<img src="images/HomeworkAssessmentCalendar_Options.png" alt="Homework/Assessment Calendar Options" width="50%">
+<img width="50%" alt="Homework/Assessment Calendar Options" src="https://github.com/user-attachments/assets/c0af856f-7468-459f-a339-acd4627113c2" />
 
 ## Assessment Overview
 
@@ -63,11 +61,11 @@ This page shows a weekly overview of assessment load by year group.
 
 It is intended to help staff monitor how many assessment events are set in each week. What appears on this page is controlled by the `Display in Overview` option inside `Assessment Classification Metadata`.
 
-<img src="images/AssessmentOverview.png" alt="Assessment Overview"  width="50%">
+<img width="50%" alt="Assessment Overview" src="https://github.com/user-attachments/assets/7b16418e-6f9b-4dbd-a3cf-a7e2e140def1" />
 
 The overview filter panel is shown here:
 
-<img src="images/AssessmentOverview_FilterOptions.png" alt="Assessment Overview Filter Options" width="50%">
+<img width="50%" alt="Assessment Overview Filter Options" src="https://github.com/user-attachments/assets/cbb280b9-9c38-4fab-8520-8d1df05ad7b3" />
 
 ### Notes
 
@@ -79,7 +77,7 @@ The overview filter panel is shown here:
 
 This page exports and restores the module's `gibbonSetting` values for Academic Calendar.
 
-<img src="images/BackupRestore.png" alt="Backup and Restore Settings" width="50%">
+<img width="50%" alt="Backup and Restore Settings" src="https://github.com/user-attachments/assets/2c000b0e-d38a-4cab-91ba-e172f93880a3" />
 
 - Settings backup and restore covers Academic Calendar `gibbonSetting` values only. This is useful if you wish to uninstall and reinstall the module in the future.
 
@@ -99,7 +97,7 @@ For the best results:
 
 ## Year Groups
 
-<img src="images/Settings_YearGroups.png" alt="Year Groups Settings" width="50%">
+<img width="50%" alt="Year Groups Settings" src="https://github.com/user-attachments/assets/d3d72c32-2c65-44ec-9ebd-8abd380d7db6" />
 
 This controls which year groups Academic Calendar is enabled for.
 
@@ -109,7 +107,7 @@ This controls which year groups Academic Calendar is enabled for.
 
 ## Calendar Display
 
-<img src="images/Settings_CalendarDisplay.png" alt="Calendar Display Settings" width="50%">
+<img width="50%" alt="Calendar Display Settings" src="https://github.com/user-attachments/assets/8dcf939b-e994-4bb1-a77e-e039099884d3" />
 
 ### Show Weekends on Calendar
 
@@ -181,7 +179,7 @@ This is a shared setting for both the calendar and the overview.
 
 ## Assessment Overview
 
-<img src="images/Settings_AssessmentOverview.png" alt="Assessment Overview Settings" width="50%">
+<img width="50%" alt="Assessment Overview Settings" src="https://github.com/user-attachments/assets/c3a4c1d7-b834-4176-a149-b9c1fc015cee" />
 
 ### Overview Week Number Mode
 
@@ -207,7 +205,7 @@ Lets you set a weekly threshold for individual year groups.
 
 ## Event Types
 
-<img src="images/Settings_EventTypes.png" alt="Event Types Settings" width="50%">
+<img width="50%" alt="Event Types Settings" src="https://github.com/user-attachments/assets/eb9878c1-fac7-47af-a426-972d85f4e2d7" />
 
 ### Assessment Classification Metadata
 
@@ -284,7 +282,8 @@ Students and Parents also see homework and assessment titles built from the same
 
 ## Permissions and Actions
 
-<img src="images/UserPermissions.png" alt="User Permissions" width="50%">
+<img width="50%" alt="User Permissions" src="https://github.com/user-attachments/assets/f0f1f0b9-7fa1-445e-999d-ae2a6653cc0a" />
+<img width="1307" height="644" alt="StaffDashboardHook" src="https://github.com/user-attachments/assets/32eea5b0-47fa-49f4-892a-87671713c47d" />
 
 The module includes these actions:
 
